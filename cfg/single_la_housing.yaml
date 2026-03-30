@@ -1,0 +1,49 @@
+# Minimal single-LA housing spine: stochastic log-earnings and log-price (monthly step),
+# then affordability ratio price/earnings = exp(logP - logE).
+main:
+  partitions:
+    - name: log_earnings
+      iteration: logEarnings
+      params:
+        drift_coefficients: [0.0005]
+        diffusion_coefficients: [0.004]
+      init_state_values: [10.9]
+      state_history_depth: 1
+      seed: 9101
+      extra_packages:
+        - github.com/umbralcalc/stochadex/pkg/continuous
+      extra_vars:
+        - logEarnings: "&continuous.DriftDiffusionIteration{}"
+
+    - name: log_price
+      iteration: logPrice
+      params:
+        drift_coefficients: [0.0008]
+        diffusion_coefficients: [0.012]
+      init_state_values: [12.2]
+      state_history_depth: 1
+      seed: 9102
+      extra_packages:
+        - github.com/umbralcalc/stochadex/pkg/continuous
+      extra_vars:
+        - logPrice: "&continuous.DriftDiffusionIteration{}"
+
+    - name: affordability
+      iteration: affordability
+      params:
+        log_price_partition: [1]
+        log_earnings_partition: [0]
+      init_state_values: [1.0]
+      state_history_depth: 1
+      seed: 0
+      extra_packages:
+        - github.com/umbralcalc/homark/pkg/housing
+      extra_vars:
+        - affordability: "&housing.AffordabilityFromLogsIteration{}"
+
+  simulation:
+    output_condition: "&simulator.EveryStepOutputCondition{}"
+    output_function: "&simulator.StdoutOutputFunction{}"
+    termination_condition: "&simulator.NumberOfStepsTerminationCondition{MaxNumberOfSteps: 60}"
+    timestep_function: "&simulator.ConstantTimestepFunction{Stepsize: 1.0}"
+    init_time_value: 0.0

@@ -1,0 +1,27 @@
+iterations:
+  - name: log_earnings
+    params:
+      drift_coefficients: [0.0005]
+      diffusion_coefficients: [0.004]
+    init_state_values: [10.9]
+    seed: 9101
+    state_width: 1
+    state_history_depth: 2
+  - name: log_price
+    params:
+      drift_coefficients: [0.0008]
+      diffusion_coefficients: [0.012]
+    init_state_values: [12.2]
+    seed: 9102
+    state_width: 1
+    state_history_depth: 2
+  - name: affordability
+    params:
+      log_price_partition: [1]
+      log_earnings_partition: [0]
+    init_state_values: [1.0]
+    seed: 0
+    state_width: 1
+    state_history_depth: 2
+init_time_value: 0.0
+timesteps_history_depth: 2
