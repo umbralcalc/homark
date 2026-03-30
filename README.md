@@ -12,6 +12,18 @@ The core question: **given a local authority's current housing stock, price dyna
 
 ---
 
+## Implementation status (repository)
+
+What exists in this codebase today:
+
+- **Pilot local authorities:** five English LAs with ONS GSS codes in [`pkg/ladata/targets.yaml`](pkg/ladata/targets.yaml) (Tower Hamlets, St Albans, Leeds, Brighton and Hove, Burnley).
+- **Monthly data spine:** [`cmd/fetchspine`](cmd/fetchspine/main.go) downloads the UK HPI full CSV and the BoE Official Bank Rate (IUDBEDR), then writes [`dat/processed/spine_monthly.csv`](dat/processed/spine_monthly.csv) restricted to those LAs, with bank rate as the **monthly mean** of daily observations joined on `YYYY-MM`. Raw downloads go under `dat/raw/` (ignored by git). Optional `dat/raw/ons_affordability.csv` with columns `area_code`, `year`, `median_ratio` adds an annual affordability column. Use `-skip-download` to rebuild from files already in `dat/raw/`; set `UKHPI_URL` or `BOE_URL` if the default HPI file URL needs bumping after a new release.
+- **Minimal stochadex model:** [`cfg/single_la_housing.yaml`](cfg/single_la_housing.yaml) — two [`DriftDiffusionIteration`](https://github.com/umbralcalc/stochadex) processes (log earnings, log price) plus [`pkg/housing`](pkg/housing/affordability_from_logs.go) `AffordabilityFromLogsIteration` (`exp(log P − log E)` as price/earnings). This is a qualitative skeleton, not yet calibrated to the spine.
+
+**Still to do (see phases below):** Land Registry Price Paid ingestion and LA aggregation, MHCLG supply indicators in the pipeline, tying simulation parameters to the historical spine, simulation-based inference, and the decision-science policy layer.
+
+---
+
 ## Why This Problem
 
 - Housing affordability has deteriorated dramatically: in 1997, 88% of local authority areas in England and Wales had median house prices below 5× median earnings. By 2021 this had fallen to just 5%. It has recovered slightly to 7% in 2025, but remains far below historical norms.
@@ -303,19 +315,20 @@ For a given local authority, produce actionable planning recommendations:
 
 ### Week 1–2: Data acquisition and exploration
 
-- [ ] Download Land Registry Price Paid Data (complete file, 1995–2025)
-- [ ] Download ONS affordability ratios and ASHE earnings data by local authority
+- [ ] Download Land Registry Price Paid Data (complete file, 1995–2025) and map to LAs (not in repo yet; current spine uses **UK HPI** by LA instead)
+- [ ] Download ONS affordability ratios and ASHE earnings data by local authority (optional annual merge supported via `dat/raw/ons_affordability.csv`; no automated ONS/ASHE pull yet)
 - [ ] Download MHCLG Live Tables on net additional dwellings and housing starts/completions by LA
-- [ ] Download Bank of England interest rate series
-- [ ] Select 5–10 target local authorities spanning different market types
-- [ ] Exploratory analysis: characterise price dynamics, supply trends, and affordability trajectories for each LA; identify the correlation structure between prices, rates, earnings, and supply
+- [x] Bank of England Official Bank Rate series — fetched by `go run ./cmd/fetchspine`
+- [x] UK HPI full file for monthly LA-level prices/indices — fetched by `fetchspine`, filtered to pilot LAs in `pkg/ladata/targets.yaml`
+- [x] Select five pilot local authorities spanning different market types — see `pkg/ladata/targets.yaml`
+- [x] Exploratory join of monthly HPI (pilot LAs) with monthly mean bank rate — output `dat/processed/spine_monthly.csv` from `fetchspine`
 
 ### Week 3–4: Minimal stochadex simulation
 
-- [ ] Implement a single-LA stochastic house price model: drift driven by earnings growth and interest rates, diffusion learned from historical volatility
+- [x] Implement a single-LA stochastic skeleton: log earnings and log price as `DriftDiffusionIteration`, affordability as `pkg/housing.AffordabilityFromLogsIteration` — `cfg/single_la_housing.yaml` (hand-set drift/diffusion; **not** yet driven by rates/earnings from the spine or learned volatility)
 - [ ] Add a simple supply pipeline: permissions → completions with stochastic delay
 - [ ] Implement the demand-supply balance as a price pressure term
-- [ ] Verify the simulation produces qualitatively sensible price and affordability trajectories
+- [x] Verify the simulation runs and passes stochadex harnesses — `go test ./pkg/housing/...`; run CLI from repo root: `go run github.com/umbralcalc/stochadex/cmd/stochadex --config cfg/single_la_housing.yaml`
 
 ### Week 5–6: Simulation-based inference
 

@@ -1,6 +1,33 @@
-# Stochadex SDK — Project Conventions
+# Stochadex SDK — Project Conventions (homark)
 
-This project uses the [stochadex](https://github.com/umbralcalc/stochadex) SDK to build and run simulations.
+This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/stochadex) SDK to build a UK local-authority housing simulation. The sections below are: **homark-specific layout and commands**, then **general stochadex iteration and YAML rules** (shared with other stochadex projects).
+
+## Homark repository layout
+
+| Path | Role |
+|------|------|
+| `cmd/fetchspine` | CLI: download UK HPI + BoE CSVs into `dat/raw/`, build `dat/processed/spine_monthly.csv` for LAs in `pkg/ladata/targets.yaml` |
+| `pkg/ladata` | Embedded pilot LA list (`targets.yaml`) and `LoadTargets()` |
+| `pkg/spine` | HTTP download, BoE monthly means, UK HPI filter/join, optional ONS annual CSV |
+| `pkg/housing` | Custom iterations (e.g. `AffordabilityFromLogsIteration`) used from YAML |
+| `cfg/single_la_housing.yaml` | Minimal monthly-step simulation wired to `pkg/housing` + stochadex `continuous` |
+| `dat/raw`, `dat/processed` | Local data (gitignored except `dat/.gitignore`); do not commit bulk CSVs |
+
+### Homark custom iterations (`pkg/housing`)
+
+| Type | Params | Description |
+|------|--------|-------------|
+| `AffordabilityFromLogsIteration` | `log_price_partition`, `log_earnings_partition` (partition indices) | Outputs `exp(log P − log E)` from latest upstream scalar states |
+
+### Data and simulation commands
+
+```bash
+go run ./cmd/fetchspine                    # download + build spine
+go run ./cmd/fetchspine -skip-download     # rebuild spine from dat/raw/*.csv
+go run github.com/umbralcalc/stochadex/cmd/stochadex --config cfg/single_la_housing.yaml
+```
+
+---
 
 ## The Iteration Interface
 
@@ -55,7 +82,7 @@ main:
 
 ### Common Output Functions
 - `&simulator.StdoutOutputFunction{}` — print to stdout
-- `simulator.NewJsonLogOutputFunction("./data.log")` — write JSON log file
+- `simulator.NewJsonLogOutputFunction("./dat/run.log")` — write JSON log file (example path under project `dat/`)
 - `&simulator.NilOutputFunction{}` — no output (for embedded sims)
 
 ### Common Termination Conditions
@@ -71,6 +98,7 @@ main:
 ```bash
 go build ./...                                    # compile this project
 go test -count=1 ./...                            # run all tests
+go run ./cmd/fetchspine                             # optional: refresh dat/raw + spine CSV
 go run github.com/umbralcalc/stochadex/cmd/stochadex --config cfg/single_la_housing.yaml
 ```
 
