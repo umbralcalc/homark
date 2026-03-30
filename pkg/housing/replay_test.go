@@ -9,6 +9,21 @@ import (
 	"github.com/umbralcalc/stochadex/pkg/simulator"
 )
 
+func TestInitLogLevelsForForwardFallback(t *testing.T) {
+	o := spine.MonthlyObservation{YearMonth: "1995-01", AveragePrice: 100e3}
+	logE, logP, err := InitLogLevelsForForward(o, 8.0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(logP-math.Log(100e3)) > 1e-9 {
+		t.Fatalf("logP %v", logP)
+	}
+	wantE := math.Log(100e3 / 8.0)
+	if math.Abs(logE-wantE) > 1e-9 {
+		t.Fatalf("logE %v want %v", logE, wantE)
+	}
+}
+
 func TestMonthlyLogSeries(t *testing.T) {
 	obs := []spine.MonthlyObservation{
 		{YearMonth: "2004-01", AveragePrice: 100000, MedianRatio: 8.0},

@@ -55,6 +55,26 @@ func logEarningsFromObs(o spine.MonthlyObservation, logP float64) (float64, erro
 	return 0, fmt.Errorf("need median_gross_annual_pay or median_ratio (with price/index)")
 }
 
+// InitLogLevelsForForward returns starting log-earnings and log-price for a stochastic forward run
+// from the first spine month. Early UK HPI rows often lack ONS pay/ratio; if both are missing,
+// implied log earnings uses defaultMedianRatio (price/earnings, e.g. 7) so logE = logP − log(ratio).
+func InitLogLevelsForForward(o spine.MonthlyObservation, defaultMedianRatio float64) (logE, logP float64, err error) {
+	logP, err = logPriceFromObs(o)
+	if err != nil {
+		return 0, 0, err
+	}
+	if o.EarningsAnnual > 0 {
+		return math.Log(o.EarningsAnnual), logP, nil
+	}
+	if o.MedianRatio > 0 {
+		return logP - math.Log(o.MedianRatio), logP, nil
+	}
+	if defaultMedianRatio <= 0 {
+		return 0, 0, fmt.Errorf("defaultMedianRatio must be > 0")
+	}
+	return logP - math.Log(defaultMedianRatio), logP, nil
+}
+
 const fromStorageTimeOffset = -1 // align FromStorageIteration index with CurrentStepNumber (see stochadex from_storage.go)
 
 // SkipInitTimestepOutputCondition suppresses NewStateIterator's one-off output at init_time_value (usually 0).

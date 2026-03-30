@@ -8,6 +8,7 @@ This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/
 |------|------|
 | `cmd/fetchspine` | CLI: download UK HPI + BoE + optional DLUHC Table 122 ODS into `dat/raw/`, build `dat/processed/spine_monthly.csv` for LAs in `pkg/ladata/targets.yaml`; optional `-fetch-ppd`, `-ons-csv-url`, `-earnings-csv-url`, `-nspl-zip-url`; optional ONS/earnings/PPD paths as before |
 | `cmd/runfromspine` | Replay one LA’s monthly spine through stochadex `FromStorageIteration` (log earnings, log price, affordability); `-validate` checks against `median_ratio` |
+| `cmd/forwardspine` | Forward sim: `bank_rate_pct` from spine storage → `DriftDiffusionBankChannelIteration` on log price; constant `DriftDiffusionIteration` on log earnings; affordability from logs |
 | `pkg/ladata` | Embedded pilot LA list (`targets.yaml`) and `LoadTargets()` |
 | `pkg/spine` | HTTP download, BoE monthly means, UK HPI filter/join, Table 122 net additions parser, optional ONS/earnings/PPD enrichment, `LoadSpineMonthlyForArea`, zip→CSV helper, `BuildSpine(..., *SpineEnrichment, outPath)` |
 | `pkg/housing` | `AffordabilityFromLogsIteration`; `MonthlyLogSeries` + `ReplayImplementations` for spine replay (`SkipInitTimestepOutputCondition` avoids extra t=0 output row); custom iterations used from YAML |
@@ -19,6 +20,7 @@ This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/
 | Type | Params | Description |
 |------|--------|-------------|
 | `AffordabilityFromLogsIteration` | `log_price_partition`, `log_earnings_partition` (partition indices) | Outputs `exp(log P − log E)` from latest upstream scalar states |
+| `DriftDiffusionBankChannelIteration` | Configure: `drift_base`, `diffusion_coefficients`, optional `bank_drift_beta`; Iterate: `bank_rate_pct` from upstream | Scalar SDE with drift `drift_base + beta×(bank_pct/100)` |
 
 ### Data and simulation commands
 
@@ -27,6 +29,7 @@ go run ./cmd/fetchspine                    # download + build spine
 go run ./cmd/fetchspine -skip-download     # rebuild spine from dat/raw/*.csv
 go run ./cmd/runfromspine -list
 go run ./cmd/runfromspine -la "Leeds" -validate
+go run ./cmd/forwardspine -la "Leeds" -bank-beta -0.02
 go run github.com/umbralcalc/stochadex/cmd/stochadex --config cfg/single_la_housing.yaml
 ```
 
