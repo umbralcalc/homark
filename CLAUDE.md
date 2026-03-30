@@ -6,9 +6,9 @@ This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/
 
 | Path | Role |
 |------|------|
-| `cmd/fetchspine` | CLI: download UK HPI + BoE CSVs into `dat/raw/`, build `dat/processed/spine_monthly.csv` for LAs in `pkg/ladata/targets.yaml` |
+| `cmd/fetchspine` | CLI: download UK HPI + BoE + optional DLUHC Table 122 ODS into `dat/raw/`, build `dat/processed/spine_monthly.csv` for LAs in `pkg/ladata/targets.yaml`; optional ONS affordability, ASHE-style earnings CSV, PPD + NSPL |
 | `pkg/ladata` | Embedded pilot LA list (`targets.yaml`) and `LoadTargets()` |
-| `pkg/spine` | HTTP download, BoE monthly means, UK HPI filter/join, optional ONS annual CSV |
+| `pkg/spine` | HTTP download, BoE monthly means, UK HPI filter/join, Table 122 net additions parser, optional ONS/earnings/PPD enrichment, `BuildSpine(..., *SpineEnrichment, outPath)` |
 | `pkg/housing` | Custom iterations (e.g. `AffordabilityFromLogsIteration`) used from YAML |
 | `cfg/single_la_housing.yaml` | Minimal monthly-step simulation wired to `pkg/housing` + stochadex `continuous` |
 | `dat/raw`, `dat/processed` | Local data (gitignored except `dat/.gitignore`); do not commit bulk CSVs |

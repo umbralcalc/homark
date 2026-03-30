@@ -146,15 +146,26 @@ type Row struct {
 	AreaCode     string
 	AveragePrice string
 	Index        string
-	BankRatePct  string // empty if no BoE match
-	MedianRatio  string // empty unless ONS enrichment
+	BankRatePct  string
+	MedianRatio  string
+	NetAddFY     string // net additional dwellings, FY containing this month
+	Earnings     string // median gross annual pay, calendar year
+	PPDMedian    string
+	PPDCount     string
 }
 
 func (r Row) yearMonth() MonthKey { return monthKeyFromTime(r.Date) }
 
-// BuildSpine streams ukhpiPath, keeps rows whose AreaCode is in codes, joins bank rates, sorts, writes outPath.
-// If ons is non-nil, adds median_ratio from annual ONS data (same as Python EDA).
-func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]float64, ons ONSAnnual, outPath string) (int, error) {
+// SpineEnrichment holds optional annual / monthly joins. Nil or empty maps are skipped per field.
+type SpineEnrichment struct {
+	MedianRatio    ONSAnnual // calendar year -> median price/earnings ratio (or similar)
+	SupplyNetFY    map[string]map[int]float64
+	EarningsAnnual AnnualString
+	PPDMonthly     map[string]map[MonthKey]PPDAgg
+}
+
+// BuildSpine streams ukhpiPath, keeps rows whose AreaCode is in codes, joins bank rates and optional enrichments.
+func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]float64, en *SpineEnrichment, outPath string) (int, error) {
 	f, err := os.Open(ukhpiPath)
 	if err != nil {
 		return 0, err
@@ -206,22 +217,44 @@ func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]f
 		if v, ok := bank[key]; ok {
 			br = formatFloat(v)
 		}
-		mr := ""
-		if ons != nil {
-			yr := dt.Year()
-			if m, ok := ons[ac]; ok {
-				mr = m[yr]
-			}
-		}
-		rows = append(rows, Row{
+		row := Row{
 			Date:         dt,
 			RegionName:   get("RegionName"),
 			AreaCode:     ac,
 			AveragePrice: get("AveragePrice"),
 			Index:        get("Index"),
 			BankRatePct:  br,
-			MedianRatio:  mr,
-		})
+		}
+		if en != nil {
+			cy := dt.Year()
+			if en.MedianRatio != nil {
+				if m, ok := en.MedianRatio[ac]; ok {
+					row.MedianRatio = m[cy]
+				}
+			}
+			if en.SupplyNetFY != nil {
+				fy := FYStartForCalendar(dt)
+				if m, ok := en.SupplyNetFY[ac]; ok {
+					if v, ok2 := m[fy]; ok2 {
+						row.NetAddFY = formatFloat(v)
+					}
+				}
+			}
+			if en.EarningsAnnual != nil {
+				if m, ok := en.EarningsAnnual[ac]; ok {
+					row.Earnings = m[cy]
+				}
+			}
+			if en.PPDMonthly != nil {
+				if m, ok := en.PPDMonthly[ac]; ok {
+					if p, ok2 := m[key]; ok2 {
+						row.PPDMedian = p.MedianPrice
+						row.PPDCount = p.SalesCount
+					}
+				}
+			}
+		}
+		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].AreaCode != rows[j].AreaCode {
@@ -238,9 +271,9 @@ func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]f
 	}
 	defer out.Close()
 	w := csv.NewWriter(out)
-	outHeader := []string{"Date", "RegionName", "AreaCode", "AveragePrice", "Index", "year_month", "bank_rate_pct"}
-	if ons != nil {
-		outHeader = append(outHeader, "median_ratio")
+	outHeader := []string{
+		"Date", "RegionName", "AreaCode", "AveragePrice", "Index", "year_month", "bank_rate_pct",
+		"median_ratio", "net_additional_dwellings_fy", "median_gross_annual_pay", "ppd_median_price", "ppd_sales_count",
 	}
 	if err := w.Write(outHeader); err != nil {
 		return 0, err
@@ -254,9 +287,11 @@ func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]f
 			row.Index,
 			string(row.yearMonth()),
 			row.BankRatePct,
-		}
-		if ons != nil {
-			line = append(line, row.MedianRatio)
+			row.MedianRatio,
+			row.NetAddFY,
+			row.Earnings,
+			row.PPDMedian,
+			row.PPDCount,
 		}
 		if err := w.Write(line); err != nil {
 			return 0, err

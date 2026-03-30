@@ -58,7 +58,7 @@ func TestBuildSpine(t *testing.T) {
 	}
 	codes := map[string]struct{}{"E09000030": {}}
 	out := filepath.Join(dir, "out.csv")
-	n, err := BuildSpine(uk, codes, bank, nil, out)
+	n, err := BuildSpine(uk, codes, bank, &SpineEnrichment{}, out)
 	if err != nil {
 		t.Fatal(err)
 	}
