@@ -27,6 +27,11 @@ func main() {
 	earningsPath := flag.String("earnings", "", "optional path to earnings_annual.csv (area_code,year,median_gross_annual_pay); default dat/raw/earnings_annual.csv if present")
 	ppdPath := flag.String("ppd", "", "optional Land Registry Price Paid CSV; default dat/raw/price_paid.csv if present")
 	nsplPath := flag.String("nspl", "", "optional NSPL-style CSV (pcds + lad*cd); default dat/raw/nspl.csv if present")
+	fetchPPD := flag.Bool("fetch-ppd", false, "download full Price Paid CSV (very large; uses -ppd-url)")
+	ppdURL := flag.String("ppd-url", envOr("PPD_CSV_URL", spine.DefaultPricePaidCSVURL), "Price Paid bulk CSV URL")
+	onsCSVURL := flag.String("ons-csv-url", envOr("ONS_CSV_URL", ""), "if set, download CSV to dat/raw/ons_affordability.csv (you supply a direct export URL)")
+	earningsCSVURL := flag.String("earnings-csv-url", envOr("EARNINGS_CSV_URL", ""), "if set, download to dat/raw/earnings_annual.csv")
+	nsplZipURL := flag.String("nspl-zip-url", envOr("NSPL_ZIP_URL", ""), "if set, download zip and extract largest .csv to dat/raw/nspl.csv")
 	flag.Parse()
 
 	repo, err := filepath.Abs(*root)
@@ -72,6 +77,45 @@ func main() {
 				fmt.Fprintf(os.Stderr, "missing %s (run without -skip-download)\n", p)
 				os.Exit(1)
 			}
+		}
+	}
+
+	if *fetchPPD {
+		dest := filepath.Join(raw, "price_paid.csv")
+		fmt.Println("Downloading Land Registry Price Paid (full CSV, may be multi-GB) …")
+		if err := spine.Download(client, *ppdURL, dest); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+	if *onsCSVURL != "" {
+		dest := filepath.Join(raw, "ons_affordability.csv")
+		fmt.Println("Downloading ONS affordability CSV …")
+		if err := spine.Download(client, *onsCSVURL, dest); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+	if *earningsCSVURL != "" {
+		dest := filepath.Join(raw, "earnings_annual.csv")
+		fmt.Println("Downloading earnings CSV …")
+		if err := spine.Download(client, *earningsCSVURL, dest); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+	if *nsplZipURL != "" {
+		zpath := filepath.Join(raw, "nspl_download.zip")
+		fmt.Println("Downloading NSPL zip …")
+		if err := spine.Download(client, *nsplZipURL, zpath); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		nsplOut := filepath.Join(raw, "nspl.csv")
+		fmt.Println("Extracting largest CSV from NSPL zip …")
+		if err := spine.ExtractLargestCSVFromZip(zpath, nsplOut); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 	}
 

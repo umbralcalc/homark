@@ -17,10 +17,11 @@ The core question: **given a local authority's current housing stock, price dyna
 What exists in this codebase today:
 
 - **Pilot local authorities:** five English LAs with ONS GSS codes in [`pkg/ladata/targets.yaml`](pkg/ladata/targets.yaml) (Tower Hamlets, St Albans, Leeds, Brighton and Hove, Burnley).
-- **Monthly data spine:** [`cmd/fetchspine`](cmd/fetchspine/main.go) downloads the UK HPI full CSV, the BoE Official Bank Rate (IUDBEDR), and (by default) **DLUHC Live Table 122** (net additional dwellings, `.ods`), then writes [`dat/processed/spine_monthly.csv`](dat/processed/spine_monthly.csv) restricted to those LAs. Bank rate is the **monthly mean** of daily observations joined on `YYYY-MM`. The spine always includes columns for optional enrichments (empty when data is absent): `median_ratio` (ONS affordability CSV), `net_additional_dwellings_fy` (Table 122, joined by UK financial year start for each calendar month), `median_gross_annual_pay` (`dat/raw/earnings_annual.csv` or `-earnings`: `area_code`, `year`, `median_gross_annual_pay`), and `ppd_median_price` / `ppd_sales_count` when both `dat/raw/price_paid.csv` and `dat/raw/nspl.csv` (postcode → LA) are present (or `-ppd` / `-nspl`). Raw downloads go under `dat/raw/` (ignored by git). Use `-skip-download` to rebuild from existing HPI/BoE files; `-skip-supply-download` skips only the Table 122 ODS. Override URLs with `UKHPI_URL`, `BOE_URL`, or `TABLE122_URL` when releases move.
-- **Minimal stochadex model:** [`cfg/single_la_housing.yaml`](cfg/single_la_housing.yaml) — two [`DriftDiffusionIteration`](https://github.com/umbralcalc/stochadex) processes (log earnings, log price) plus [`pkg/housing`](pkg/housing/affordability_from_logs.go) `AffordabilityFromLogsIteration` (`exp(log P − log E)` as price/earnings). This is a qualitative skeleton, not yet calibrated to the spine.
+- **Monthly data spine:** [`cmd/fetchspine`](cmd/fetchspine/main.go) downloads the UK HPI full CSV, the BoE Official Bank Rate (IUDBEDR), and (by default) **DLUHC Live Table 122** (net additional dwellings, `.ods`), then writes [`dat/processed/spine_monthly.csv`](dat/processed/spine_monthly.csv) restricted to those LAs. Bank rate is the **monthly mean** of daily observations joined on `YYYY-MM`. The spine always includes columns for optional enrichments (empty when data is absent): `median_ratio` (ONS affordability CSV), `net_additional_dwellings_fy` (Table 122, joined by UK financial year start for each calendar month), `median_gross_annual_pay` (`dat/raw/earnings_annual.csv` or `-earnings`: `area_code`, `year`, `median_gross_annual_pay`), and `ppd_median_price` / `ppd_sales_count` when both `dat/raw/price_paid.csv` and `dat/raw/nspl.csv` (postcode → LA) are present (or `-ppd` / `-nspl`). Raw downloads go under `dat/raw/` (ignored by git). Use `-skip-download` to rebuild from existing HPI/BoE files; `-skip-supply-download` skips only the Table 122 ODS. Override URLs with `UKHPI_URL`, `BOE_URL`, or `TABLE122_URL` when releases move. Optional bulk pulls: `-fetch-ppd` (Price Paid CSV; set `PPD_CSV_URL` if the portal URL changes), `-ons-csv-url`, `-earnings-csv-url`, `-nspl-zip-url` (downloads zip, extracts largest `.csv` to `dat/raw/nspl.csv`).
+- **Minimal stochadex model:** [`cfg/single_la_housing.yaml`](cfg/single_la_housing.yaml) — two [`DriftDiffusionIteration`](https://github.com/umbralcalc/stochadex) processes (log earnings, log price) plus [`pkg/housing`](pkg/housing/affordability_from_logs.go) `AffordabilityFromLogsIteration` (`exp(log P − log E)` as price/earnings). This is a qualitative skeleton for forward simulation, not calibrated to data.
+- **Historical spine replay:** [`cmd/runfromspine`](cmd/runfromspine/main.go) loads [`dat/processed/spine_monthly.csv`](dat/processed/spine_monthly.csv) for one pilot LA and runs [`pkg/housing`](pkg/housing/replay.go) `ReplayImplementations` — three [`FromStorageIteration`](https://github.com/umbralcalc/stochadex) partitions (log earnings, log price, affordability) built from the spine. Earnings come from `median_gross_annual_pay` when present, otherwise from `median_ratio` with price/index. Use `-validate` to check replayed affordability against ONS `median_ratio`. List LAs: `-list`.
 
-**Still to do (see phases below):** tying simulation parameters to the historical spine, simulation-based inference, and the decision-science policy layer.
+**Still to do (see phases below):** stochastic model parameters informed by the spine (beyond deterministic replay), simulation-based inference, and the decision-science policy layer.
 
 ---
 
@@ -315,9 +316,9 @@ For a given local authority, produce actionable planning recommendations:
 
 ### Week 1–2: Data acquisition and exploration
 
-- [ ] Download Land Registry Price Paid Data (complete file, 1995–2025) and map to LAs (not in repo yet; current spine uses **UK HPI** by LA instead)
-- [ ] Download ONS affordability ratios and ASHE earnings data by local authority (optional annual merge supported via `dat/raw/ons_affordability.csv`; no automated ONS/ASHE pull yet)
-- [ ] Download MHCLG Live Tables on net additional dwellings and housing starts/completions by LA
+- [ ] Download Land Registry Price Paid Data (complete file, 1995–2025) and map to LAs — use `go run ./cmd/fetchspine -fetch-ppd` (multi-GB) plus `dat/raw/nspl.csv`, or keep UK HPI–only spine without PPD columns
+- [ ] ONS affordability / ASHE earnings — place CSVs in `dat/raw/` or pass `-ons-csv-url` / `-earnings-csv-url` to `fetchspine` with a **direct download URL** you obtain from ONS/NOMIS (schemas must match `ons_affordability.csv` / `earnings_annual.csv`)
+- [ ] Download MHCLG Live Tables on net additional dwellings and housing starts/completions by LA (Table 122 net additions is automated; starts/completions not wired yet)
 - [x] Bank of England Official Bank Rate series — fetched by `go run ./cmd/fetchspine`
 - [x] UK HPI full file for monthly LA-level prices/indices — fetched by `fetchspine`, filtered to pilot LAs in `pkg/ladata/targets.yaml`
 - [x] Select five pilot local authorities spanning different market types — see `pkg/ladata/targets.yaml`
@@ -325,7 +326,8 @@ For a given local authority, produce actionable planning recommendations:
 
 ### Week 3–4: Minimal stochadex simulation
 
-- [x] Implement a single-LA stochastic skeleton: log earnings and log price as `DriftDiffusionIteration`, affordability as `pkg/housing.AffordabilityFromLogsIteration` — `cfg/single_la_housing.yaml` (hand-set drift/diffusion; **not** yet driven by rates/earnings from the spine or learned volatility)
+- [x] Implement a single-LA stochastic skeleton: log earnings and log price as `DriftDiffusionIteration`, affordability as `pkg/housing.AffordabilityFromLogsIteration` — `cfg/single_la_housing.yaml` (hand-set drift/diffusion for forward simulation)
+- [x] Deterministic **replay** of the monthly spine through stochadex (`cmd/runfromspine`, `pkg/housing.ReplayImplementations` + `FromStorageIteration`)
 - [ ] Add a simple supply pipeline: permissions → completions with stochastic delay
 - [ ] Implement the demand-supply balance as a price pressure term
 - [x] Verify the simulation runs and passes stochadex harnesses — `go test ./pkg/housing/...`; run CLI from repo root: `go run github.com/umbralcalc/stochadex/cmd/stochadex --config cfg/single_la_housing.yaml`

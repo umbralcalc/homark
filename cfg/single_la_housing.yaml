@@ -1,5 +1,8 @@
 # Minimal single-LA housing spine: stochastic log-earnings and log-price (monthly step),
 # then affordability ratio price/earnings = exp(logP - logE).
+#
+# Historical replay from dat/processed/spine_monthly.csv (no synthetic drift) is:
+#   go run ./cmd/runfromspine -la "Tower Hamlets"   # or -area E09000030
 main:
   partitions:
     - name: log_earnings
