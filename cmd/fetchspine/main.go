@@ -207,6 +207,25 @@ func main() {
 	}
 
 	fmt.Printf("Wrote %s rows=%d las=%d\n", outPath, n, len(codes))
+
+	codesList := make([]string, 0, len(targets))
+	for _, a := range targets {
+		codesList = append(codesList, a.AreaCode)
+	}
+	cov, err := spine.MedianPayCoverageByArea(outPath, codesList)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "pay coverage: %v\n", err)
+	} else {
+		fmt.Println("median_gross_annual_pay coverage (non-zero / rows) by area:")
+		for _, a := range targets {
+			p := cov[a.AreaCode]
+			pct := 100.0 * p.Fraction()
+			fmt.Printf("  %s %s: %.1f%% (%d/%d)\n", a.AreaCode, a.Name, pct, p.WithPay, p.TotalRows)
+		}
+		if earnFile == "" && *earningsCSVURL == "" {
+			fmt.Println("  (add dat/raw/earnings_annual.csv or -earnings-csv-url to populate pay; see README data section)")
+		}
+	}
 }
 
 func envOr(key, fallback string) string {

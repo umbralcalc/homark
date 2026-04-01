@@ -9,8 +9,8 @@ func TestFYStartForCalendar(t *testing.T) {
 	cases := []struct {
 		y, m, d, want int
 	}{
-		{2024, 6, 15, 2024},  // June -> FY 2024-25
-		{2024, 3, 31, 2023},  // March -> FY 2023-24
+		{2024, 6, 15, 2024}, // June -> FY 2024-25
+		{2024, 3, 31, 2023}, // March -> FY 2023-24
 		{2024, 4, 1, 2024},
 	}
 	for _, c := range cases {

@@ -12,7 +12,8 @@ import (
 // AnnualString maps area_code -> calendar year -> value string (for earnings, ratios, etc.).
 type AnnualString map[string]map[int]string
 
-// LoadEarningsAnnual reads CSV with columns area_code, year, median_gross_annual_pay (headers case-insensitive).
+// LoadEarningsAnnual reads an annual-by-LA pay CSV. Headers are case-insensitive; recognised aliases include
+// area_code / geography_code / lad_code; year / calendar_year; median_gross_annual_pay / obs_value / value.
 func LoadEarningsAnnual(path string) (AnnualString, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -29,11 +30,19 @@ func LoadEarningsAnnual(path string) (AnnualString, error) {
 	for i, h := range hdr {
 		col[strings.ToLower(strings.TrimSpace(h))] = i
 	}
-	acI, ok1 := col["area_code"]
-	yI, ok2 := col["year"]
-	payI, ok3 := col["median_gross_annual_pay"]
-	if !ok1 || !ok2 || !ok3 {
-		return nil, fmt.Errorf("earnings csv: need columns area_code, year, median_gross_annual_pay")
+	acI, err := resolveAreaCodeColumn(col)
+	if err != nil {
+		return nil, fmt.Errorf("earnings csv: %w", err)
+	}
+	yI, ok2 := headerIndex(col, []string{"year", "calendar_year", "time"})
+	if !ok2 {
+		return nil, fmt.Errorf("earnings csv: need column year (or calendar_year, time)")
+	}
+	payI, ok3 := headerIndex(col, []string{
+		"median_gross_annual_pay", "median_annual_pay", "gross_annual_pay", "pay", "value", "obs_value",
+	})
+	if !ok3 {
+		return nil, fmt.Errorf("earnings csv: need median_gross_annual_pay (or median_annual_pay, obs_value, …)")
 	}
 	out := make(AnnualString)
 	for {

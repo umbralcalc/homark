@@ -34,13 +34,17 @@ func main() {
 	supHi := flag.Float64("supply-beta-hi", 0, "grid high for supply_beta")
 	supSteps := flag.Int("supply-steps", 0, "grid points (0 = hold base)")
 
-	wLogE := flag.Float64("w-log-earnings", 0, "weight on log-earnings RMSE in objective (0 = log price only)")
+	dspLo := flag.Float64("demand-supply-beta-lo", 0, "grid low for DemandSupplyPressureBeta")
+	dspHi := flag.Float64("demand-supply-beta-hi", 0, "grid high for DemandSupplyPressureBeta")
+	dspSteps := flag.Int("demand-supply-steps", 0, "grid points (0 = use -demand-supply-beta base only)")
+
+	wLogE := flag.Float64("w-log-earnings", 0, "weight on log-earnings RMSE in objective (0 = log price only; try ~0.1–1 for joint fit)")
 
 	base := housing.DefaultForwardOptions()
 	flag.Float64Var(&base.EarningsDrift, "earnings-drift", base.EarningsDrift, "fixed log-earnings drift")
 	flag.Float64Var(&base.PriceDrift, "price-drift", base.PriceDrift, "base price drift when not on grid")
 	flag.Float64Var(&base.SupplyBeta, "supply-beta", base.SupplyBeta, "base supply_beta when not on grid")
-	flag.Float64Var(&base.DemandSupplyPressureBeta, "demand-supply-beta", base.DemandSupplyPressureBeta, "fixed demand–supply pressure beta (not on grid)")
+	flag.Float64Var(&base.DemandSupplyPressureBeta, "demand-supply-beta", base.DemandSupplyPressureBeta, "DemandSupplyPressureBeta when demand-supply-steps <= 0")
 	flag.Float64Var(&base.InitMedianRatioFallback, "init-median-ratio-fallback", 7, "first-month P/E fallback")
 	flag.Parse()
 
@@ -91,6 +95,7 @@ func main() {
 		BankBetaLo: *bankLo, BankBetaHi: *bankHi, BankSteps: *bankSteps,
 		PriceDriftLo: *driftLo, PriceDriftHi: *driftHi, PriceDriftSteps: *driftSteps,
 		SupplyBetaLo: *supLo, SupplyBetaHi: *supHi, SupplySteps: *supSteps,
+		DemandSupplyPressureBetaLo: *dspLo, DemandSupplyPressureBetaHi: *dspHi, DemandSupplySteps: *dspSteps,
 	}
 
 	best, rmseP, rmseE, err := housing.GridCalibrateDeterministic(obs, base, grid, *wLogE)

@@ -10,12 +10,14 @@ import (
 // CalibrateGrid defines independent 1D grids for a small deterministic least-squares search.
 // A dimension with Steps <= 0 is held at the base ForwardOptions value.
 type CalibrateGrid struct {
-	BankBetaLo, BankBetaHi     float64
-	BankSteps                  int
-	PriceDriftLo, PriceDriftHi float64
-	PriceDriftSteps            int
-	SupplyBetaLo, SupplyBetaHi float64
-	SupplySteps                int
+	BankBetaLo, BankBetaHi                                 float64
+	BankSteps                                              int
+	PriceDriftLo, PriceDriftHi                             float64
+	PriceDriftSteps                                        int
+	SupplyBetaLo, SupplyBetaHi                             float64
+	SupplySteps                                            int
+	DemandSupplyPressureBetaLo, DemandSupplyPressureBetaHi float64
+	DemandSupplySteps                                      int
 }
 
 // DefaultCalibrateGrid searches bank_beta on [-0.1, 0.1] with 21 points; holds price drift and supply beta at base.
@@ -24,6 +26,7 @@ func DefaultCalibrateGrid() CalibrateGrid {
 		BankBetaLo: -0.1, BankBetaHi: 0.1, BankSteps: 21,
 		PriceDriftLo: 0, PriceDriftHi: 0, PriceDriftSteps: 0,
 		SupplyBetaLo: 0, SupplyBetaHi: 0, SupplySteps: 0,
+		DemandSupplyPressureBetaLo: 0, DemandSupplyPressureBetaHi: 0, DemandSupplySteps: 0,
 	}
 }
 
@@ -68,7 +71,8 @@ func RMSELogPrice(a, b []float64) float64 {
 }
 
 // GridCalibrateDeterministic searches grid dimensions to minimize RMSE of log price vs TargetLogSeries.
-// Weights log-earnings RMSE with wLogE (0 = ignore).
+// When wLogE > 0, adds wLogE × RMSE(log earnings) to the score (same units as log-price RMSE; earnings
+// series are often smoother—try wLogE in ~0.1–1 unless you want earnings to dominate).
 func GridCalibrateDeterministic(
 	obs []spine.MonthlyObservation,
 	base ForwardOptions,
@@ -91,41 +95,48 @@ func GridCalibrateDeterministic(
 	bankVals := linspaceGrid(grid.BankBetaLo, grid.BankBetaHi, grid.BankSteps, base.BankBeta)
 	driftVals := linspaceGrid(grid.PriceDriftLo, grid.PriceDriftHi, grid.PriceDriftSteps, base.PriceDrift)
 	supplyVals := linspaceGrid(grid.SupplyBetaLo, grid.SupplyBetaHi, grid.SupplySteps, base.SupplyBeta)
+	dspVals := linspaceGrid(
+		grid.DemandSupplyPressureBetaLo, grid.DemandSupplyPressureBetaHi, grid.DemandSupplySteps,
+		base.DemandSupplyPressureBeta,
+	)
 
 	for _, bb := range bankVals {
 		for _, pd := range driftVals {
 			for _, sb := range supplyVals {
-				o := base
-				o.BankBeta = bb
-				o.PriceDrift = pd
-				o.SupplyBeta = sb
-				do := DeterministicForwardOptions(o)
-				_, series, runErr := RunForwardLogSeries(obs, do)
-				if runErr != nil {
-					return ForwardOptions{}, 0, 0, runErr
-				}
-				fp, ok1 := series["log_price"]
-				fe, ok2 := series["log_earnings"]
-				if !ok1 || !ok2 || len(fp) != len(targetP) {
-					return ForwardOptions{}, 0, 0, fmt.Errorf("calibrate: forward series length")
-				}
-				predP := make([]float64, len(fp))
-				predE := make([]float64, len(fe))
-				for i := range fp {
-					predP[i] = fp[i][0]
-					predE[i] = fe[i][0]
-				}
-				rp := RMSELogPrice(predP, targetP)
-				re := RMSELogPrice(predE, targetE)
-				score := rp
-				if wLogE > 0 {
-					score += wLogE * re
-				}
-				if score < bestRMSE {
-					bestRMSE = score
-					best = o
-					rmseP = rp
-					rmseE = re
+				for _, dsp := range dspVals {
+					o := base
+					o.BankBeta = bb
+					o.PriceDrift = pd
+					o.SupplyBeta = sb
+					o.DemandSupplyPressureBeta = dsp
+					do := DeterministicForwardOptions(o)
+					_, series, runErr := RunForwardLogSeries(obs, do)
+					if runErr != nil {
+						return ForwardOptions{}, 0, 0, runErr
+					}
+					fp, ok1 := series["log_price"]
+					fe, ok2 := series["log_earnings"]
+					if !ok1 || !ok2 || len(fp) != len(targetP) {
+						return ForwardOptions{}, 0, 0, fmt.Errorf("calibrate: forward series length")
+					}
+					predP := make([]float64, len(fp))
+					predE := make([]float64, len(fe))
+					for i := range fp {
+						predP[i] = fp[i][0]
+						predE[i] = fe[i][0]
+					}
+					rp := RMSELogPrice(predP, targetP)
+					re := RMSELogPrice(predE, targetE)
+					score := rp
+					if wLogE > 0 {
+						score += wLogE * re
+					}
+					if score < bestRMSE {
+						bestRMSE = score
+						best = o
+						rmseP = rp
+						rmseE = re
+					}
 				}
 			}
 		}

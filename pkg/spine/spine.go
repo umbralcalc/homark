@@ -308,7 +308,8 @@ func formatFloat(v float64) string {
 // ONSAnnual maps (area code, calendar year) -> median_ratio string for optional enrichment.
 type ONSAnnual map[string]map[int]string
 
-// LoadONSAnnual reads CSV with columns area_code, year, median_ratio (header names case-insensitive).
+// LoadONSAnnual reads an annual affordability-style CSV (area × year → ratio string). Headers are
+// case-insensitive; area and value columns accept the same aliases as LoadEarningsAnnual.
 func LoadONSAnnual(path string) (ONSAnnual, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -325,11 +326,17 @@ func LoadONSAnnual(path string) (ONSAnnual, error) {
 	for i, h := range hdr {
 		col[strings.ToLower(strings.TrimSpace(h))] = i
 	}
-	acI, ok1 := col["area_code"]
-	yI, ok2 := col["year"]
-	mI, ok3 := col["median_ratio"]
-	if !ok1 || !ok2 || !ok3 {
-		return nil, fmt.Errorf("ons: need columns area_code, year, median_ratio")
+	acI, err := resolveAreaCodeColumn(col)
+	if err != nil {
+		return nil, fmt.Errorf("ons affordability csv: %w", err)
+	}
+	yI, ok2 := headerIndex(col, []string{"year", "calendar_year", "time"})
+	if !ok2 {
+		return nil, fmt.Errorf("ons: need column year (or calendar_year, time)")
+	}
+	mI, ok3 := headerIndex(col, []string{"median_ratio", "ratio", "value", "obs_value"})
+	if !ok3 {
+		return nil, fmt.Errorf("ons: need column median_ratio (or ratio, obs_value, …)")
 	}
 	out := make(ONSAnnual)
 	for {

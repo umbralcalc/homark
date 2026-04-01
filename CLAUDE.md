@@ -6,12 +6,12 @@ This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/
 
 | Path | Role |
 |------|------|
-| `cmd/fetchspine` | CLI: download UK HPI + BoE + optional DLUHC Table 122 ODS into `dat/raw/`, build `dat/processed/spine_monthly.csv` for LAs in `pkg/ladata/targets.yaml`; optional `-fetch-ppd`, `-ons-csv-url`, `-earnings-csv-url`, `-nspl-zip-url`; optional ONS/earnings/PPD paths as before |
+| `cmd/fetchspine` | CLI: download UK HPI + BoE + optional DLUHC Table 122 ODS into `dat/raw/`, build `dat/processed/spine_monthly.csv` for LAs in `pkg/ladata/targets.yaml`; optional ONS/earnings (`-ons-csv-url`, `-earnings-csv-url` or `dat/raw/*.csv` with flexible headers); prints **median pay coverage** per LA after build |
 | `cmd/runfromspine` | Replay one LA’s monthly spine through stochadex `FromStorageIteration` (log earnings, log price, affordability); `-validate` checks against `median_ratio` |
 | `cmd/forwardspine` | Forward sim: `FromStorageIteration` bank/supply; pipeline and `price_drift` as `ValuesFunctionIteration`; `DriftDiffusionIteration` on earnings and log price; `StateTimeStorageOutputFunction` (coordinator calls `Configure` → pre-register + `AppendByIndex` hot path) |
-| `cmd/calibratespine` | Grid search (deterministic forward) to minimise log-price RMSE vs filled spine |
+| `cmd/calibratespine` | Grid search (deterministic forward): optional grids for bank/price drift/supply/**demand–supply pressure** betas; `-w-log-earnings` joint objective |
 | `pkg/ladata` | Embedded pilot LA list (`targets.yaml`) and `LoadTargets()` |
-| `pkg/spine` | HTTP download, BoE monthly means, UK HPI filter/join, Table 122 net additions parser, optional ONS/earnings/PPD enrichment, `LoadSpineMonthlyForArea`, zip→CSV helper, `BuildSpine(..., *SpineEnrichment, outPath)` |
+| `pkg/spine` | HTTP download, BoE monthly means, UK HPI filter/join, Table 122, optional ONS/earnings/PPD enrichment (`LoadONSAnnual`, `LoadEarningsAnnual` with NOMIS-style column aliases), `MedianPayCoverageByArea`, `LoadSpineMonthlyForArea`, `BuildSpine` |
 | `pkg/housing` | `AffordabilityFromLogsIteration`; `ForwardSpineConfigs` / `forward_values.go`; `MonthlyLogSeries` + `ReplayImplementations` for spine replay (`SkipInitTimestepOutputCondition` avoids extra t=0 output row); custom iterations used from YAML |
 | `cfg/single_la_housing.yaml` | Minimal monthly-step simulation wired to `pkg/housing` + stochadex `continuous` |
 | `dat/raw`, `dat/processed` | Local data (gitignored except `dat/.gitignore`); do not commit bulk CSVs |
