@@ -212,18 +212,22 @@ func main() {
 	for _, a := range targets {
 		codesList = append(codesList, a.AreaCode)
 	}
-	cov, err := spine.MedianPayCoverageByArea(outPath, codesList)
+	payCov, ratioCov, err := spine.PilotSpineCoverage(outPath, codesList)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "pay coverage: %v\n", err)
+		fmt.Fprintf(os.Stderr, "coverage: %v\n", err)
 	} else {
-		fmt.Println("median_gross_annual_pay coverage (non-zero / rows) by area:")
+		fmt.Println("Spine column coverage (non-zero / rows) by area:")
 		for _, a := range targets {
-			p := cov[a.AreaCode]
-			pct := 100.0 * p.Fraction()
-			fmt.Printf("  %s %s: %.1f%% (%d/%d)\n", a.AreaCode, a.Name, pct, p.WithPay, p.TotalRows)
+			p := payCov[a.AreaCode]
+			r := ratioCov[a.AreaCode]
+			fmt.Printf("  %s %s: pay %.1f%% (%d/%d)  ratio %.1f%% (%d/%d)\n",
+				a.AreaCode, a.Name, 100*p.Fraction(), p.NonZero, p.TotalRows, 100*r.Fraction(), r.NonZero, r.TotalRows)
 		}
 		if earnFile == "" && *earningsCSVURL == "" {
-			fmt.Println("  (add dat/raw/earnings_annual.csv or -earnings-csv-url to populate pay; see README data section)")
+			fmt.Println("  (pay: add dat/raw/earnings_annual.csv or -earnings-csv-url; template: pkg/spine/testdata/enrichment/)")
+		}
+		if onsFile == "" && *onsCSVURL == "" {
+			fmt.Println("  (ratio: add dat/raw/ons_affordability.csv or -ons-csv-url; template: pkg/spine/testdata/enrichment/)")
 		}
 	}
 }

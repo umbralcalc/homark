@@ -25,6 +25,13 @@ What exists in this codebase today:
 
 **Still to do (see phases below):** full SBI / posteriors, permissions–completions data (beyond this pipeline sketch), and the decision-science policy layer.
 
+### Near-term workflow (pilot data + calibration)
+
+1. **Optional bootstrap:** copy illustrative templates from `pkg/spine/testdata/enrichment/*.csv` into `dat/raw/` (see [`dat/raw/README.md`](dat/raw/README.md)), then replace with real NOMIS/ONS exports when available.
+2. **Build spine:** `go run ./cmd/fetchspine` (or `-skip-download` if HPI/BoE/raw files already exist). Check printed **pay** and **median_ratio** coverage per LA.
+3. **Audit coverage:** `go run ./cmd/spinehealth` — add `-min-pay-pct 95 -min-ratio-pct 95` in CI once real data is in place.
+4. **Calibrate:** e.g. [`scripts/calibrate_pilot_example.sh`](scripts/calibrate_pilot_example.sh) or `go run ./cmd/calibratespine -la "Leeds" -demand-supply-steps 5 -demand-supply-beta-lo -0.02 -demand-supply-beta-hi 0.02 -w-log-earnings 0.25`, then run `forwardspine` with the printed coefficients.
+
 ---
 
 ## Why This Problem
