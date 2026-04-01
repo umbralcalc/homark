@@ -21,7 +21,7 @@ This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/
 | Type | Params | Description |
 |------|--------|-------------|
 | `AffordabilityFromLogsIteration` | `log_price_partition`, `log_earnings_partition` (partition indices) | Outputs `exp(log P − log E)` from latest upstream scalar states |
-| `PipelineStockValuesFunction` / `PriceDriftValuesFunction` | Closure args (partition indices, `ForwardOptions`, scales) | Used with `general.ValuesFunctionIteration`: pipeline stock update; scalar log-price drift from bank/supply/pipeline states |
+| `PipelineStockValuesFunction` / `PriceDriftValuesFunction` | Closure args (indices incl. `log_earnings`, `initLE`, `ForwardOptions`, scales) | Pipeline stock; log-price drift = base + bank/supply/pipeline terms + optional `DemandSupplyPressureBeta` × ((log E−init LE) − supply/scale − pipeline/ref) |
 | Forward spine composition | `ForwardSpineConfigs` | `price_drift` partition feeds `drift_coefficients` into `continuous.DriftDiffusionIteration` for `log_price` via `params_from_upstream` |
 
 ### Data and simulation commands

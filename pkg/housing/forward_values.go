@@ -39,9 +39,10 @@ func PipelineStockValuesFunction(pipePartitionIndex int, approvalRate, completio
 	}
 }
 
-// PriceDriftValuesFunction returns drift_base + bank + supply/scale − pipeline×stock/ref, matching the
-// former monolithic log-price iteration (optional terms omitted when the corresponding beta is zero).
-func PriceDriftValuesFunction(bankIdx, supplyIdx, pipeIdx int, opt ForwardOptions, supplyScale, pipeRef float64) func(
+// PriceDriftValuesFunction returns drift for the log-price SDE: base + bank/supply/pipeline terms
+// (optional betas) plus DemandSupplyPressureBeta × imbalance when non-zero.
+// logEarningsIdx is the partition index of log_earnings (same coordinator step sees its latest committed state).
+func PriceDriftValuesFunction(bankIdx, supplyIdx, pipeIdx, logEarningsIdx int, initLogEarnings float64, opt ForwardOptions, supplyScale, pipeRef float64) func(
 	params *simulator.Params,
 	partitionIndex int,
 	stateHistories []*simulator.StateHistory,
@@ -63,6 +64,11 @@ func PriceDriftValuesFunction(bankIdx, supplyIdx, pipeIdx int, opt ForwardOption
 		if opt.PipelineBeta != 0 {
 			d -= opt.PipelineBeta * (pipe / pipeRef)
 		}
+		if opt.DemandSupplyPressureBeta != 0 {
+			le := stateHistories[logEarningsIdx].Values.At(0, 0)
+			imb := (le - initLogEarnings) - (supply / supplyScale) - (pipe / pipeRef)
+			d += opt.DemandSupplyPressureBeta * imb
+		}
 		return []float64{d}
 	}
 }
@@ -78,6 +84,10 @@ func initialPriceDriftScalar(obs0 spine.MonthlyObservation, opt ForwardOptions, 
 	}
 	if opt.PipelineBeta != 0 {
 		d -= opt.PipelineBeta * (pipe / pipeRef)
+	}
+	if opt.DemandSupplyPressureBeta != 0 {
+		imb := -(supply / supplyScale) - (pipe / pipeRef)
+		d += opt.DemandSupplyPressureBeta * imb
 	}
 	return d
 }

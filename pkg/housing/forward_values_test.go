@@ -43,6 +43,15 @@ func TestPriceDriftComposeHarness(t *testing.T) {
 		Seed:              0,
 		StateHistoryDepth: 2,
 	})
+	const initLE = 3.0
+	g.SetPartition(&simulator.PartitionConfig{
+		Name:              "log_earnings",
+		Iteration:         &general.ConstantValuesIteration{},
+		Params:            simulator.NewParams(map[string][]float64{}),
+		InitStateValues:   []float64{initLE},
+		Seed:              0,
+		StateHistoryDepth: 2,
+	})
 	opt := ForwardOptions{
 		PriceDrift: 0.001, BankBeta: 0.1, SupplyBeta: 0, PipelineBeta: 0.05,
 		SupplyScale: 1000, PipelineRef: 500,
@@ -51,7 +60,7 @@ func TestPriceDriftComposeHarness(t *testing.T) {
 	g.SetPartition(&simulator.PartitionConfig{
 		Name: "price_drift",
 		Iteration: &general.ValuesFunctionIteration{
-			Function: PriceDriftValuesFunction(0, 1, 2, opt, opt.SupplyScale, opt.PipelineRef),
+			Function: PriceDriftValuesFunction(0, 1, 2, 3, initLE, opt, opt.SupplyScale, opt.PipelineRef),
 		},
 		Params:            simulator.NewParams(map[string][]float64{}),
 		InitStateValues:   []float64{drift0},

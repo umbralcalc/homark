@@ -33,6 +33,7 @@ func main() {
 	supplyScale := flag.Float64("supply-scale", 1000, "scale for net_additional_dwellings_fy in drift")
 	pipelineBeta := flag.Float64("pipeline-beta", 0, "log-price drift dampening: beta × (pipeline_stock / pipeline-ref)")
 	pipelineRef := flag.Float64("pipeline-ref", 500, "reference pipeline stock for pipeline-beta term")
+	demandSupplyBeta := flag.Float64("demand-supply-beta", 0, "log-price drift: beta × ((log_earnings−init) − net_add/scale − pipeline/ref)")
 	approvalRate := flag.Float64("approval-rate", 0, "mean dwellings/month entering pipeline (0 keeps pipeline at 0 without init)")
 	completionFrac := flag.Float64("completion-frac", 0.15, "fraction of pipeline stock completing per month")
 	pipelineInit := flag.Float64("pipeline-init", 0, "initial pipeline stock (dwellings)")
@@ -91,7 +92,8 @@ func main() {
 		PriceDrift: *priceDrift, PriceDiff: *priceDiff,
 		BankBeta: *bankBeta, SupplyBeta: *supplyBeta, SupplyScale: *supplyScale,
 		PipelineBeta: *pipelineBeta, PipelineRef: *pipelineRef,
-		ApprovalRate: *approvalRate, CompletionFrac: *completionFrac, PipelineInit: *pipelineInit,
+		DemandSupplyPressureBeta: *demandSupplyBeta,
+		ApprovalRate:             *approvalRate, CompletionFrac: *completionFrac, PipelineInit: *pipelineInit,
 		SeedEarnings: *seedE, SeedPrice: *seedP,
 		InitMedianRatioFallback: *initRatio,
 	}

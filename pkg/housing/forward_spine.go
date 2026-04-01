@@ -22,7 +22,11 @@ type ForwardOptions struct {
 	ApprovalRate                float64 // mean units/month entering pipeline (0 = no inflow)
 	CompletionFrac              float64 // fraction of stock completing per month; 0 → 0.15 in iteration
 	PipelineInit                float64 // initial pipeline stock
-	SeedEarnings, SeedPrice     uint64
+	// DemandSupplyPressureBeta scales a composite imbalance in log-price drift:
+	//   (log_earnings - init_log_earnings) - supply_net/supply_scale - pipeline_stock/pipeline_ref
+	// Positive earnings growth vs t0 raises drift; higher net additions or pipeline stock lowers it. Zero disables.
+	DemandSupplyPressureBeta float64
+	SeedEarnings, SeedPrice  uint64
 	// InitMedianRatioFallback is used only when the first spine row has no pay or ONS ratio (typical before ~1997).
 	// Implied log earnings = logP − log(fallback). Zero means use 7.0.
 	InitMedianRatioFallback float64
@@ -33,7 +37,7 @@ func DefaultForwardOptions() ForwardOptions {
 	return ForwardOptions{
 		EarningsDrift: 0.0005, EarningsDiff: 0.004,
 		PriceDrift: 0.0008, PriceDiff: 0.012,
-		BankBeta: 0, SupplyBeta: 0, PipelineBeta: 0,
+		BankBeta: 0, SupplyBeta: 0, PipelineBeta: 0, DemandSupplyPressureBeta: 0,
 		SupplyScale: 1000, PipelineRef: 500,
 		ApprovalRate: 0, CompletionFrac: 0.15,
 		PipelineInit: 0,
@@ -43,11 +47,13 @@ func DefaultForwardOptions() ForwardOptions {
 }
 
 // ForwardSpineConfigs builds a monthly simulation: bank_rate_pct, net_additional_dwellings_fy (scaled),
-// and pipeline stock feed a scalar price_drift partition (ValuesFunctionIteration); log_price uses
-// continuous.DriftDiffusionIteration with drift_coefficients wired from price_drift. Log earnings use
-// DriftDiffusionIteration; affordability is exp(logP − logE).
+// and pipeline stock feed a scalar price_drift partition (ValuesFunctionIteration); optional
+// DemandSupplyPressureBeta couples log earnings (vs initial) to supply and pipeline in that drift.
+// log_price uses continuous.DriftDiffusionIteration with drift_coefficients wired from price_drift.
+// Log earnings use DriftDiffusionIteration; affordability is exp(logP − logE).
 //
 // Partition order: bank_rate, supply_net, pipeline, price_drift, log_earnings, log_price, affordability.
+// price_drift reads bank (0), supply (1), pipeline (2), and log_earnings (4) for the demand–supply pressure term.
 // GenerateConfigs has already called Configure on each iteration.
 func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*simulator.Settings, *simulator.Implementations, error) {
 	if len(obs) == 0 {
@@ -117,10 +123,11 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 		Seed:              0,
 		StateHistoryDepth: 2,
 	})
+	const idxLogEarnings = 4
 	g.SetPartition(&simulator.PartitionConfig{
 		Name: "price_drift",
 		Iteration: &general.ValuesFunctionIteration{
-			Function: PriceDriftValuesFunction(0, 1, 2, opt, supplyScale, pipeRef),
+			Function: PriceDriftValuesFunction(0, 1, 2, idxLogEarnings, initLE, opt, supplyScale, pipeRef),
 		},
 		Params:            simulator.NewParams(map[string][]float64{}),
 		InitStateValues:   []float64{initialPriceDriftScalar(obs[0], opt, supplyScale, pipeRef)},

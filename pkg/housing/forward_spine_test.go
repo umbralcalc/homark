@@ -24,6 +24,27 @@ func TestForwardSpineHarness(t *testing.T) {
 	}
 }
 
+func TestForwardSpineWithDemandSupplyPressureHarness(t *testing.T) {
+	sample := filepath.Join("..", "spine", "testdata", "spine_replay_sample.csv")
+	obs, err := spine.LoadSpineMonthlyForArea(sample, "E09000030")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(obs) > 24 {
+		obs = obs[:24]
+	}
+	opt := DefaultForwardOptions()
+	opt.DemandSupplyPressureBeta = 0.02
+	opt.PriceDiff, opt.EarningsDiff = 0, 0
+	settings, impl, err := ForwardSpineConfigs(obs, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := simulator.RunWithHarnesses(settings, impl); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDeterministicForwardLogSeriesShape(t *testing.T) {
 	// Constant bank rate: drift should equal drift_base when bank_drift_beta = 0.
 	obs := []spine.MonthlyObservation{

@@ -40,6 +40,7 @@ func main() {
 	flag.Float64Var(&base.EarningsDrift, "earnings-drift", base.EarningsDrift, "fixed log-earnings drift")
 	flag.Float64Var(&base.PriceDrift, "price-drift", base.PriceDrift, "base price drift when not on grid")
 	flag.Float64Var(&base.SupplyBeta, "supply-beta", base.SupplyBeta, "base supply_beta when not on grid")
+	flag.Float64Var(&base.DemandSupplyPressureBeta, "demand-supply-beta", base.DemandSupplyPressureBeta, "fixed demand–supply pressure beta (not on grid)")
 	flag.Float64Var(&base.InitMedianRatioFallback, "init-median-ratio-fallback", 7, "first-month P/E fallback")
 	flag.Parse()
 
@@ -98,12 +99,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("best bank_beta=%g price_drift=%g supply_beta=%g\n", best.BankBeta, best.PriceDrift, best.SupplyBeta)
+	fmt.Printf("best bank_beta=%g price_drift=%g supply_beta=%g demand_supply_beta=%g\n", best.BankBeta, best.PriceDrift, best.SupplyBeta, best.DemandSupplyPressureBeta)
 	fmt.Printf("rmse_log_price=%g rmse_log_earnings=%g\n", rmseP, rmseE)
 	if *laName != "" {
-		fmt.Printf("hint: go run ./cmd/forwardspine -la %q -bank-beta %g -price-drift %g -supply-beta %g\n", *laName, best.BankBeta, best.PriceDrift, best.SupplyBeta)
+		fmt.Printf("hint: go run ./cmd/forwardspine -la %q -bank-beta %g -price-drift %g -supply-beta %g -demand-supply-beta %g\n", *laName, best.BankBeta, best.PriceDrift, best.SupplyBeta, best.DemandSupplyPressureBeta)
 	} else {
-		fmt.Printf("hint: go run ./cmd/forwardspine -area %q -bank-beta %g -price-drift %g -supply-beta %g\n", ac, best.BankBeta, best.PriceDrift, best.SupplyBeta)
+		fmt.Printf("hint: go run ./cmd/forwardspine -area %q -bank-beta %g -price-drift %g -supply-beta %g -demand-supply-beta %g\n", ac, best.BankBeta, best.PriceDrift, best.SupplyBeta, best.DemandSupplyPressureBeta)
 	}
 }
 
