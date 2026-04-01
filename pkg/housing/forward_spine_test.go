@@ -24,7 +24,7 @@ func TestForwardSpineHarness(t *testing.T) {
 	}
 }
 
-func TestDriftDiffusionBankChannelIterationZeroBetaMatchesBase(t *testing.T) {
+func TestDeterministicForwardLogSeriesShape(t *testing.T) {
 	// Constant bank rate: drift should equal drift_base when bank_drift_beta = 0.
 	obs := []spine.MonthlyObservation{
 		{YearMonth: "2004-01", AveragePrice: 100e3, MedianRatio: 8.0, BankRatePct: 5.0},

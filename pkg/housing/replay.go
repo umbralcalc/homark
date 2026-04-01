@@ -81,8 +81,8 @@ const fromStorageTimeOffset = -1 // align FromStorageIteration index with Curren
 // Otherwise EveryStepOutputCondition emits an extra row before the first Step, which desynchronises replay from spine rows.
 type SkipInitTimestepOutputCondition struct{}
 
-func (SkipInitTimestepOutputCondition) IsOutputStep(_ string, _ []float64, cumulativeTimesteps float64) bool {
-	return cumulativeTimesteps > 0
+func (SkipInitTimestepOutputCondition) IsOutputStep(_ string, _ []float64, timestepsHistory *simulator.CumulativeTimestepsHistory) bool {
+	return timestepsHistory.CurrentStepNumber > 0
 }
 
 // ReplayImplementations returns storage-backed partitions: log_earnings, log_price, affordability (precomputed),

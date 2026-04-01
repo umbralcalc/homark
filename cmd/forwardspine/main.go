@@ -28,7 +28,14 @@ func main() {
 	earningsDiff := flag.Float64("earnings-diff", 0.004, "log-earnings diffusion σ")
 	priceDrift := flag.Float64("price-drift", 0.0008, "log-price base drift per month (before bank term)")
 	priceDiff := flag.Float64("price-diff", 0.012, "log-price diffusion σ")
-	bankBeta := flag.Float64("bank-beta", 0, "added to log-price drift as beta × (bank_rate_pct/100); negative = higher rates dampen price growth")
+	bankBeta := flag.Float64("bank-beta", 0, "log-price drift term: beta × (bank_rate_pct/100)")
+	supplyBeta := flag.Float64("supply-beta", 0, "log-price drift term: beta × (net_add_FY / supply-scale)")
+	supplyScale := flag.Float64("supply-scale", 1000, "scale for net_additional_dwellings_fy in drift")
+	pipelineBeta := flag.Float64("pipeline-beta", 0, "log-price drift dampening: beta × (pipeline_stock / pipeline-ref)")
+	pipelineRef := flag.Float64("pipeline-ref", 500, "reference pipeline stock for pipeline-beta term")
+	approvalRate := flag.Float64("approval-rate", 0, "mean dwellings/month entering pipeline (0 keeps pipeline at 0 without init)")
+	completionFrac := flag.Float64("completion-frac", 0.15, "fraction of pipeline stock completing per month")
+	pipelineInit := flag.Float64("pipeline-init", 0, "initial pipeline stock (dwellings)")
 	seedE := flag.Uint64("seed-earnings", 9101, "RNG seed for log earnings")
 	seedP := flag.Uint64("seed-price", 9102, "RNG seed for log price")
 	initRatio := flag.Float64("init-median-ratio-fallback", 7, "if first month has no pay/ONS ratio, use this P/E to set initial log earnings (logE = logP − log(ratio))")
@@ -82,7 +89,10 @@ func main() {
 	opt := housing.ForwardOptions{
 		EarningsDrift: *earningsDrift, EarningsDiff: *earningsDiff,
 		PriceDrift: *priceDrift, PriceDiff: *priceDiff,
-		BankBeta: *bankBeta, SeedEarnings: *seedE, SeedPrice: *seedP,
+		BankBeta: *bankBeta, SupplyBeta: *supplyBeta, SupplyScale: *supplyScale,
+		PipelineBeta: *pipelineBeta, PipelineRef: *pipelineRef,
+		ApprovalRate: *approvalRate, CompletionFrac: *completionFrac, PipelineInit: *pipelineInit,
+		SeedEarnings: *seedE, SeedPrice: *seedP,
 		InitMedianRatioFallback: *initRatio,
 	}
 	settings, impl, err := housing.ForwardSpineConfigs(obs, opt)
@@ -103,10 +113,13 @@ func main() {
 
 	w := csv.NewWriter(os.Stdout)
 	_ = w.Write([]string{
-		"step", "time", "year_month", "bank_rate_pct", "log_earnings", "log_price", "affordability",
+		"step", "time", "year_month", "bank_rate_pct", "net_add_fy", "pipeline_stock",
+		"log_earnings", "log_price", "affordability",
 	})
 	times := store.GetTimes()
 	vB := store.GetValues("bank_rate")
+	vS := store.GetValues("supply_net")
+	vPl := store.GetValues("pipeline")
 	vE := store.GetValues("log_earnings")
 	vP := store.GetValues("log_price")
 	vA := store.GetValues("affordability")
@@ -120,6 +133,8 @@ func main() {
 			fmtFloat(times[i]),
 			ym,
 			fmtFloat(vB[i][0]),
+			fmtFloat(vS[i][0]),
+			fmtFloat(vPl[i][0]),
 			fmtFloat(vE[i][0]),
 			fmtFloat(vP[i][0]),
 			fmtFloat(vA[i][0]),

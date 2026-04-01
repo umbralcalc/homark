@@ -14,7 +14,14 @@ import (
 type ForwardOptions struct {
 	EarningsDrift, EarningsDiff float64
 	PriceDrift, PriceDiff       float64
-	BankBeta                    float64 // added to log-price drift as beta * (bank_pct / 100)
+	BankBeta                    float64 // on (bank_pct / 100)
+	SupplyBeta                  float64 // on (net_add_FY / supply_scale)
+	SupplyScale                 float64 // dwellings scale; 0 → 1000 inside iteration
+	PipelineBeta                float64 // on (pipeline_stock / pipeline_ref); higher → more dampening when stock high
+	PipelineRef                 float64 // reference stock; 0 → 500 inside iteration
+	ApprovalRate                float64 // mean units/month entering pipeline (0 = no inflow)
+	CompletionFrac              float64 // fraction of stock completing per month; 0 → 0.15 in iteration
+	PipelineInit                float64 // initial pipeline stock
 	SeedEarnings, SeedPrice     uint64
 	// InitMedianRatioFallback is used only when the first spine row has no pay or ONS ratio (typical before ~1997).
 	// Implied log earnings = logP − log(fallback). Zero means use 7.0.
@@ -26,16 +33,21 @@ func DefaultForwardOptions() ForwardOptions {
 	return ForwardOptions{
 		EarningsDrift: 0.0005, EarningsDiff: 0.004,
 		PriceDrift: 0.0008, PriceDiff: 0.012,
-		BankBeta:     0,
-		SeedEarnings: 9101, SeedPrice: 9102,
+		BankBeta: 0, SupplyBeta: 0, PipelineBeta: 0,
+		SupplyScale: 1000, PipelineRef: 500,
+		ApprovalRate: 0, CompletionFrac: 0.15,
+		PipelineInit: 0,
+		SeedEarnings: 9101,
+		SeedPrice:    9102,
 	}
 }
 
-// ForwardSpineConfigs builds a monthly simulation: historical bank_rate_pct from storage drives
-// log-price drift (via DriftDiffusionBankChannelIteration); log earnings follow a constant
+// ForwardSpineConfigs builds a monthly simulation: bank_rate_pct, net_additional_dwellings_fy (scaled),
+// and pipeline stock feed a scalar price_drift partition (ValuesFunctionIteration); log_price uses
+// continuous.DriftDiffusionIteration with drift_coefficients wired from price_drift. Log earnings use
 // DriftDiffusionIteration; affordability is exp(logP − logE).
 //
-// Partition order: bank_rate, log_earnings, log_price, affordability.
+// Partition order: bank_rate, supply_net, pipeline, price_drift, log_earnings, log_price, affordability.
 // GenerateConfigs has already called Configure on each iteration.
 func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*simulator.Settings, *simulator.Implementations, error) {
 	if len(obs) == 0 {
@@ -51,8 +63,23 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 	}
 
 	bankData := make([][]float64, len(obs))
+	supplyData := make([][]float64, len(obs))
 	for i := range obs {
 		bankData[i] = []float64{obs[i].BankRatePct}
+		supplyData[i] = []float64{obs[i].NetAddFY}
+	}
+
+	supplyScale := opt.SupplyScale
+	if supplyScale <= 0 {
+		supplyScale = 1000
+	}
+	pipeRef := opt.PipelineRef
+	if pipeRef <= 0 {
+		pipeRef = 500
+	}
+	compFrac := opt.CompletionFrac
+	if compFrac <= 0 {
+		compFrac = 0.15
 	}
 
 	g := simulator.NewConfigGenerator()
@@ -73,6 +100,34 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 		StateHistoryDepth: 2,
 	})
 	g.SetPartition(&simulator.PartitionConfig{
+		Name:              "supply_net",
+		Iteration:         &general.FromStorageIteration{Data: supplyData, InitStepsTaken: fromStorageTimeOffset},
+		Params:            simulator.NewParams(map[string][]float64{}),
+		InitStateValues:   []float64{supplyData[0][0]},
+		Seed:              0,
+		StateHistoryDepth: 2,
+	})
+	g.SetPartition(&simulator.PartitionConfig{
+		Name: "pipeline",
+		Iteration: &general.ValuesFunctionIteration{
+			Function: PipelineStockValuesFunction(2, opt.ApprovalRate, compFrac),
+		},
+		Params:            simulator.NewParams(map[string][]float64{}),
+		InitStateValues:   []float64{opt.PipelineInit},
+		Seed:              0,
+		StateHistoryDepth: 2,
+	})
+	g.SetPartition(&simulator.PartitionConfig{
+		Name: "price_drift",
+		Iteration: &general.ValuesFunctionIteration{
+			Function: PriceDriftValuesFunction(0, 1, 2, opt, supplyScale, pipeRef),
+		},
+		Params:            simulator.NewParams(map[string][]float64{}),
+		InitStateValues:   []float64{initialPriceDriftScalar(obs[0], opt, supplyScale, pipeRef)},
+		Seed:              0,
+		StateHistoryDepth: 2,
+	})
+	g.SetPartition(&simulator.PartitionConfig{
 		Name:      "log_earnings",
 		Iteration: &continuous.DriftDiffusionIteration{},
 		Params: simulator.NewParams(map[string][]float64{
@@ -85,14 +140,12 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 	})
 	g.SetPartition(&simulator.PartitionConfig{
 		Name:      "log_price",
-		Iteration: &DriftDiffusionBankChannelIteration{},
+		Iteration: &continuous.DriftDiffusionIteration{},
 		Params: simulator.NewParams(map[string][]float64{
-			"drift_base":             {opt.PriceDrift},
 			"diffusion_coefficients": {opt.PriceDiff},
-			"bank_drift_beta":        {opt.BankBeta},
 		}),
 		ParamsFromUpstream: map[string]simulator.NamedUpstreamConfig{
-			"bank_rate_pct": {Upstream: "bank_rate"},
+			"drift_coefficients": {Upstream: "price_drift"},
 		},
 		InitStateValues:   []float64{initLP},
 		Seed:              opt.SeedPrice,
@@ -113,4 +166,23 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 
 	settings, impl := g.GenerateConfigs()
 	return settings, impl, nil
+}
+
+// RunForwardLogSeries runs the forward spine configs, collects one value per partition per step from StateTimeStorage,
+// and returns time series keyed by partition name (same length as obs). Typical use: deterministic calibration (set PriceDiff and EarningsDiff to 0 in opt).
+func RunForwardLogSeries(obs []spine.MonthlyObservation, opt ForwardOptions) (times []float64, series map[string][][]float64, err error) {
+	settings, impl, err := ForwardSpineConfigs(obs, opt)
+	if err != nil {
+		return nil, nil, err
+	}
+	store := simulator.NewStateTimeStorage()
+	impl.OutputFunction = &simulator.StateTimeStorageOutputFunction{Store: store}
+	coord := simulator.NewPartitionCoordinator(settings, impl)
+	coord.Run()
+	times = append([]float64(nil), store.GetTimes()...)
+	series = make(map[string][][]float64)
+	for _, name := range store.GetNames() {
+		series[name] = store.GetValues(name)
+	}
+	return times, series, nil
 }

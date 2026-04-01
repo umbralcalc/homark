@@ -1,4 +1,4 @@
 Date,RegionName,AreaCode,AveragePrice,Index,year_month,bank_rate_pct,median_ratio,net_additional_dwellings_fy,median_gross_annual_pay,ppd_median_price,ppd_sales_count
-2004-01-01,Tower Hamlets,E09000030,100000,50.0,2004-01,4.5,8.5,,,,,
-2004-02-01,Tower Hamlets,E09000030,101000,51.0,2004-02,4.5,8.5,,,,,
-2004-03-01,Tower Hamlets,E09000030,102000,52.0,2004-03,4.5,8.6,,,,,
+2004-01-01,Tower Hamlets,E09000030,100000,50.0,2004-01,4.5,8.5,1200,,,,
+2004-02-01,Tower Hamlets,E09000030,101000,51.0,2004-02,4.5,8.5,1200,,,,
+2004-03-01,Tower Hamlets,E09000030,102000,52.0,2004-03,4.5,8.6,1180,,,,

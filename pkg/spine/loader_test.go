@@ -27,4 +27,7 @@ func TestLoadSpineMonthlyForArea(t *testing.T) {
 	if obs[0].EarningsAnnual != 0 {
 		t.Fatalf("earnings should be empty in fixture")
 	}
+	if math.Abs(obs[0].NetAddFY-1200) > 1e-9 {
+		t.Fatalf("NetAddFY %v", obs[0].NetAddFY)
+	}
 }

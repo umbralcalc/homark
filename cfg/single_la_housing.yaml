@@ -4,8 +4,10 @@
 # Historical replay from dat/processed/spine_monthly.csv (no synthetic drift) is:
 #   go run ./cmd/runfromspine -la "Tower Hamlets"   # or -area E09000030
 #
-# Forward simulation with spine bank_rate_pct driving log-price drift (programmatic config):
-#   go run ./cmd/forwardspine -la "Tower Hamlets" -bank-beta -0.01
+# Forward simulation with spine covariates (programmatic config):
+#   go run ./cmd/forwardspine -la "Tower Hamlets" -bank-beta -0.01 -supply-beta -2e-5
+# Deterministic grid calibration vs historical log price:
+#   go run ./cmd/calibratespine -la "Tower Hamlets"
 main:
   partitions:
     - name: log_earnings

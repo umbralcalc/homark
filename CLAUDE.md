@@ -8,10 +8,11 @@ This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/
 |------|------|
 | `cmd/fetchspine` | CLI: download UK HPI + BoE + optional DLUHC Table 122 ODS into `dat/raw/`, build `dat/processed/spine_monthly.csv` for LAs in `pkg/ladata/targets.yaml`; optional `-fetch-ppd`, `-ons-csv-url`, `-earnings-csv-url`, `-nspl-zip-url`; optional ONS/earnings/PPD paths as before |
 | `cmd/runfromspine` | Replay one LA’s monthly spine through stochadex `FromStorageIteration` (log earnings, log price, affordability); `-validate` checks against `median_ratio` |
-| `cmd/forwardspine` | Forward sim: `bank_rate_pct` from spine storage → `DriftDiffusionBankChannelIteration` on log price; constant `DriftDiffusionIteration` on log earnings; affordability from logs |
+| `cmd/forwardspine` | Forward sim: `FromStorageIteration` bank/supply; pipeline and `price_drift` as `ValuesFunctionIteration`; `DriftDiffusionIteration` on earnings and log price; `StateTimeStorageOutputFunction` (coordinator calls `Configure` → pre-register + `AppendByIndex` hot path) |
+| `cmd/calibratespine` | Grid search (deterministic forward) to minimise log-price RMSE vs filled spine |
 | `pkg/ladata` | Embedded pilot LA list (`targets.yaml`) and `LoadTargets()` |
 | `pkg/spine` | HTTP download, BoE monthly means, UK HPI filter/join, Table 122 net additions parser, optional ONS/earnings/PPD enrichment, `LoadSpineMonthlyForArea`, zip→CSV helper, `BuildSpine(..., *SpineEnrichment, outPath)` |
-| `pkg/housing` | `AffordabilityFromLogsIteration`; `MonthlyLogSeries` + `ReplayImplementations` for spine replay (`SkipInitTimestepOutputCondition` avoids extra t=0 output row); custom iterations used from YAML |
+| `pkg/housing` | `AffordabilityFromLogsIteration`; `ForwardSpineConfigs` / `forward_values.go`; `MonthlyLogSeries` + `ReplayImplementations` for spine replay (`SkipInitTimestepOutputCondition` avoids extra t=0 output row); custom iterations used from YAML |
 | `cfg/single_la_housing.yaml` | Minimal monthly-step simulation wired to `pkg/housing` + stochadex `continuous` |
 | `dat/raw`, `dat/processed` | Local data (gitignored except `dat/.gitignore`); do not commit bulk CSVs |
 
@@ -20,7 +21,8 @@ This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/
 | Type | Params | Description |
 |------|--------|-------------|
 | `AffordabilityFromLogsIteration` | `log_price_partition`, `log_earnings_partition` (partition indices) | Outputs `exp(log P − log E)` from latest upstream scalar states |
-| `DriftDiffusionBankChannelIteration` | Configure: `drift_base`, `diffusion_coefficients`, optional `bank_drift_beta`; Iterate: `bank_rate_pct` from upstream | Scalar SDE with drift `drift_base + beta×(bank_pct/100)` |
+| `PipelineStockValuesFunction` / `PriceDriftValuesFunction` | Closure args (partition indices, `ForwardOptions`, scales) | Used with `general.ValuesFunctionIteration`: pipeline stock update; scalar log-price drift from bank/supply/pipeline states |
+| Forward spine composition | `ForwardSpineConfigs` | `price_drift` partition feeds `drift_coefficients` into `continuous.DriftDiffusionIteration` for `log_price` via `params_from_upstream` |
 
 ### Data and simulation commands
 
@@ -29,7 +31,8 @@ go run ./cmd/fetchspine                    # download + build spine
 go run ./cmd/fetchspine -skip-download     # rebuild spine from dat/raw/*.csv
 go run ./cmd/runfromspine -list
 go run ./cmd/runfromspine -la "Leeds" -validate
-go run ./cmd/forwardspine -la "Leeds" -bank-beta -0.02
+go run ./cmd/forwardspine -la "Leeds" -bank-beta -0.02 -supply-beta -1e-5
+go run ./cmd/calibratespine -la "Leeds" -bank-steps 21
 go run github.com/umbralcalc/stochadex/cmd/stochadex --config cfg/single_la_housing.yaml
 ```
 
@@ -87,9 +90,13 @@ main:
 ```
 
 ### Common Output Functions
+
+`simulator.OutputFunction` includes `Configure(settings *Settings)`, invoked once from `NewPartitionCoordinator` before parallel output (use for pre-registration, file handles, etc.).
+
 - `&simulator.StdoutOutputFunction{}` — print to stdout
 - `simulator.NewJsonLogOutputFunction("./dat/run.log")` — write JSON log file (example path under project `dat/`)
 - `&simulator.NilOutputFunction{}` — no output (for embedded sims)
+- `&simulator.StateTimeStorageOutputFunction{Store: store}` — pre-registers partition names on `Store` and appends via `AppendByIndex` during the run
 
 ### Common Termination Conditions
 - `&simulator.NumberOfStepsTerminationCondition{MaxNumberOfSteps: N}`
