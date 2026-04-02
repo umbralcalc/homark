@@ -35,10 +35,12 @@ func main() {
 	pipelineRef := flag.Float64("pipeline-ref", 500, "reference pipeline stock for pipeline-beta term")
 	demandSupplyBeta := flag.Float64("demand-supply-beta", 0, "log-price drift: beta × ((log_earnings−init) − net_add/scale − pipeline/ref)")
 	approvalRate := flag.Float64("approval-rate", 0, "mean dwellings/month entering pipeline (0 keeps pipeline at 0 without init)")
-	completionFrac := flag.Float64("completion-frac", 0.15, "fraction of pipeline stock completing per month")
+	completionFrac := flag.Float64("completion-frac", 0.15, "fraction/probability of pipeline stock completing per month")
+	attritionRate := flag.Float64("attrition-rate", 0, "probability each remaining unit lapses per month (stochastic pipeline only; 0 = no attrition)")
 	pipelineInit := flag.Float64("pipeline-init", 0, "initial pipeline stock (dwellings)")
 	seedE := flag.Uint64("seed-earnings", 9101, "RNG seed for log earnings")
 	seedP := flag.Uint64("seed-price", 9102, "RNG seed for log price")
+	seedPipeline := flag.Uint64("seed-pipeline", 0, "RNG seed for pipeline (0 = deterministic; >0 enables stochastic completions and attrition)")
 	initRatio := flag.Float64("init-median-ratio-fallback", 7, "if first month has no pay/ONS ratio, use this P/E to set initial log earnings (logE = logP − log(ratio))")
 	flag.Parse()
 
@@ -93,7 +95,8 @@ func main() {
 		BankBeta: *bankBeta, SupplyBeta: *supplyBeta, SupplyScale: *supplyScale,
 		PipelineBeta: *pipelineBeta, PipelineRef: *pipelineRef,
 		DemandSupplyPressureBeta: *demandSupplyBeta,
-		ApprovalRate:             *approvalRate, CompletionFrac: *completionFrac, PipelineInit: *pipelineInit,
+		ApprovalRate: *approvalRate, CompletionFrac: *completionFrac, AttritionRate: *attritionRate,
+		PipelineInit: *pipelineInit, SeedPipeline: *seedPipeline,
 		SeedEarnings: *seedE, SeedPrice: *seedP,
 		InitMedianRatioFallback: *initRatio,
 	}

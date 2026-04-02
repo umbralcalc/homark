@@ -20,8 +20,10 @@ type ForwardOptions struct {
 	PipelineBeta                float64 // on (pipeline_stock / pipeline_ref); higher → more dampening when stock high
 	PipelineRef                 float64 // reference stock; 0 → 500 inside iteration
 	ApprovalRate                float64 // mean units/month entering pipeline (0 = no inflow)
-	CompletionFrac              float64 // fraction of stock completing per month; 0 → 0.15 in iteration
+	CompletionFrac              float64 // fraction/probability of pipeline stock completing per month; 0 → 0.15
+	AttritionRate               float64 // probability each remaining unit lapses per month (stochastic path only)
 	PipelineInit                float64 // initial pipeline stock
+	SeedPipeline                uint64  // >0 uses StochasticPipelineIteration; 0 = deterministic ValuesFunctionIteration
 	// DemandSupplyPressureBeta scales a composite imbalance in log-price drift:
 	//   (log_earnings - init_log_earnings) - supply_net/supply_scale - pipeline_stock/pipeline_ref
 	// Positive earnings growth vs t0 raises drift; higher net additions or pipeline stock lowers it. Zero disables.
@@ -39,8 +41,8 @@ func DefaultForwardOptions() ForwardOptions {
 		PriceDrift: 0.0008, PriceDiff: 0.012,
 		BankBeta: 0, SupplyBeta: 0, PipelineBeta: 0, DemandSupplyPressureBeta: 0,
 		SupplyScale: 1000, PipelineRef: 500,
-		ApprovalRate: 0, CompletionFrac: 0.15,
-		PipelineInit: 0,
+		ApprovalRate: 0, CompletionFrac: 0.15, AttritionRate: 0,
+		PipelineInit: 0, SeedPipeline: 0,
 		SeedEarnings: 9101,
 		SeedPrice:    9102,
 	}
@@ -113,16 +115,31 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 		Seed:              0,
 		StateHistoryDepth: 2,
 	})
-	g.SetPartition(&simulator.PartitionConfig{
-		Name: "pipeline",
-		Iteration: &general.ValuesFunctionIteration{
-			Function: PipelineStockValuesFunction(2, opt.ApprovalRate, compFrac),
-		},
-		Params:            simulator.NewParams(map[string][]float64{}),
-		InitStateValues:   []float64{opt.PipelineInit},
-		Seed:              0,
-		StateHistoryDepth: 2,
-	})
+	if opt.SeedPipeline > 0 {
+		g.SetPartition(&simulator.PartitionConfig{
+			Name:      "pipeline",
+			Iteration: &StochasticPipelineIteration{},
+			Params: simulator.NewParams(map[string][]float64{
+				"completion_rate": {compFrac},
+				"attrition_rate":  {opt.AttritionRate},
+				"approval_rate":   {opt.ApprovalRate},
+			}),
+			InitStateValues:   []float64{opt.PipelineInit},
+			Seed:              opt.SeedPipeline,
+			StateHistoryDepth: 2,
+		})
+	} else {
+		g.SetPartition(&simulator.PartitionConfig{
+			Name: "pipeline",
+			Iteration: &general.ValuesFunctionIteration{
+				Function: PipelineStockValuesFunction(2, opt.ApprovalRate, compFrac),
+			},
+			Params:            simulator.NewParams(map[string][]float64{}),
+			InitStateValues:   []float64{opt.PipelineInit},
+			Seed:              0,
+			StateHistoryDepth: 2,
+		})
+	}
 	const idxLogEarnings = 4
 	g.SetPartition(&simulator.PartitionConfig{
 		Name: "price_drift",
