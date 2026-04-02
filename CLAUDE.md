@@ -2,6 +2,8 @@
 
 This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/stochadex) SDK to build a UK local-authority housing simulation. The sections below are: **homark-specific layout and commands**, then **general stochadex iteration and YAML rules** (shared with other stochadex projects).
 
+**Project plan:** the full phased roadmap (data → model → learning → policy) and a **roadmap vs repository** table live in [`README.md`](README.md). There is no CI workflow in-repo; use `go test ./...`, optional `./scripts/spinehealth_gate.sh`, and the CLIs below.
+
 ## Homark repository layout
 
 | Path | Role |
@@ -16,6 +18,8 @@ This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/
 | `pkg/housing` | `AffordabilityFromLogsIteration`; `ForwardSpineConfigs` / `forward_values.go`; `MonthlyLogSeries` + `ReplayImplementations` for spine replay (`SkipInitTimestepOutputCondition` avoids extra t=0 output row); custom iterations used from YAML |
 | `cfg/single_la_housing.yaml` | Minimal monthly-step simulation wired to `pkg/housing` + stochadex `continuous` |
 | `dat/raw`, `dat/processed` | Local data (gitignored except `dat/.gitignore`); do not commit bulk CSVs |
+| `scripts/spinehealth_gate.sh` | Local 95% / 95% pay+ratio gate via `spinehealth` on `dat/processed/spine_monthly.csv` (or pass another spine path) |
+| `scripts/calibrate_pilot_example.sh` | Example `calibratespine` run with demand-supply grid + `-w-log-earnings` |
 
 ### Homark custom iterations (`pkg/housing`)
 
@@ -34,6 +38,9 @@ go run ./cmd/runfromspine -list
 go run ./cmd/runfromspine -la "Leeds" -validate
 go run ./cmd/forwardspine -la "Leeds" -bank-beta -0.02 -supply-beta -1e-5
 go run ./cmd/calibratespine -la "Leeds" -bank-steps 21
+go run ./cmd/spinehealth -root .
+./scripts/spinehealth_gate.sh
+./scripts/calibrate_pilot_example.sh "Leeds"
 go run github.com/umbralcalc/stochadex/cmd/stochadex --config cfg/single_la_housing.yaml
 ```
 

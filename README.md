@@ -22,7 +22,7 @@ What exists in this codebase today:
 - **Historical spine replay:** [`cmd/runfromspine`](cmd/runfromspine/main.go) loads [`dat/processed/spine_monthly.csv`](dat/processed/spine_monthly.csv) for one pilot LA and runs [`pkg/housing`](pkg/housing/replay.go) `ReplayImplementations` — three [`FromStorageIteration`](https://github.com/umbralcalc/stochadex) partitions (log earnings, log price, affordability) built from the spine. Earnings come from `median_gross_annual_pay` when present, otherwise from `median_ratio` with price/index. Use `-validate` to check replayed affordability against ONS `median_ratio`. List LAs: `-list`.
 - **Spine-informed forward simulation:** [`cmd/forwardspine`](cmd/forwardspine/main.go) uses [`pkg/housing.ForwardSpineConfigs`](pkg/housing/forward_spine.go): **`bank_rate`** and **`supply_net`** from `FromStorageIteration`; **`pipeline`** and **`price_drift`** use [`ValuesFunctionIteration`](https://github.com/umbralcalc/stochadex) via [`PipelineStockValuesFunction` / `PriceDriftValuesFunction`](pkg/housing/forward_values.go) (drift = base + bank + supply/scale − pipeline dampening + optional **demand–supply pressure**: `-demand-supply-beta` × ((log E−init LE) − net_add/scale − pipeline/ref); **`log_price`** is [`DriftDiffusionIteration`](https://github.com/umbralcalc/stochadex) with `drift_coefficients` wired from `price_drift`. Log earnings use `DriftDiffusionIteration`. Initial log levels use only the **first** spine month; `-init-median-ratio-fallback` fills missing early ONS fields. Flags: `-supply-beta`, `-pipeline-beta`, `-demand-supply-beta`, `-approval-rate`, etc.
 - **Deterministic grid calibration:** [`cmd/calibratespine`](cmd/calibratespine/main.go) searches `bank_beta` and optional grids for `price_drift`, `supply_beta`, and **`demand_supply_pressure`** (`-demand-supply-steps`, `-demand-supply-beta-lo/hi`) to minimise RMSE of **log price** vs a filled historical series (`ForwardFillAffordableFields` + `MonthlyLogSeries`), with optional **joint** weight on log-earnings RMSE (`-w-log-earnings`). Uses zero diffusion for a smooth objective; re-enable diffusion when running `forwardspine` with the printed coefficients.
-- **Spine enrichment coverage gate (local):** [`scripts/spinehealth_gate.sh`](scripts/spinehealth_gate.sh) runs [`cmd/spinehealth`](cmd/spinehealth/main.go) with **`-min-pay-pct 95`** and **`-min-ratio-pct 95`** on `dat/processed/spine_monthly.csv` (or pass another spine path). A synthetic reference slice for all pilot LAs lives at [`pkg/spine/testdata/spine_pilot_enrichment_fixture.csv`](pkg/spine/testdata/spine_pilot_enrichment_fixture.csv) (not official statistics—shape/coverage check only).
+- **Spine enrichment coverage gate (local):** [`scripts/spinehealth_gate.sh`](scripts/spinehealth_gate.sh) runs [`cmd/spinehealth`](cmd/spinehealth/main.go) with **`-min-pay-pct 95`** and **`-min-ratio-pct 95`** on `dat/processed/spine_monthly.csv` (or pass another spine path). A synthetic reference slice for all pilot LAs lives at [`pkg/spine/testdata/spine_pilot_enrichment_fixture.csv`](pkg/spine/testdata/spine_pilot_enrichment_fixture.csv) (not official statistics—shape/coverage check only). [`scripts/calibrate_pilot_example.sh`](scripts/calibrate_pilot_example.sh) is a worked example for [`cmd/calibratespine`](cmd/calibratespine/main.go).
 
 **Still to do (see phases below):** full SBI / posteriors, permissions–completions data (beyond this pipeline sketch), and the decision-science policy layer.
 
@@ -32,6 +32,20 @@ What exists in this codebase today:
 2. **Build spine:** `go run ./cmd/fetchspine` (or `-skip-download` if HPI/BoE/raw files already exist). Check printed **pay** and **median_ratio** coverage per LA.
 3. **Audit coverage:** `go run ./cmd/spinehealth` on the built spine, or `./scripts/spinehealth_gate.sh` (95% pay + ratio for every pilot LA) after placing official exports in `dat/raw/` and rebuilding.
 4. **Calibrate:** e.g. [`scripts/calibrate_pilot_example.sh`](scripts/calibrate_pilot_example.sh) or `go run ./cmd/calibratespine -la "Leeds" -demand-supply-steps 5 -demand-supply-beta-lo -0.02 -demand-supply-beta-hi 0.02 -w-log-earnings 0.25`, then run `forwardspine` with the printed coefficients.
+
+### Roadmap vs repository (living plan)
+
+This table ties the **phases below** to what **actually exists in homark** today (updated with the codebase; not a release checklist).
+
+| Phase | Plan intent | In the repo now | Next coding/data steps |
+|-------|-------------|-----------------|-------------------------|
+| **1 — Data** | Ingest transactions, affordability, supply, context | **UK HPI + BoE + Table 122** via [`cmd/fetchspine`](cmd/fetchspine/main.go); **optional** ONS affordability + ASHE-style earnings CSVs, PPD+NSPL, URLs on CLI; **five pilot LAs** in [`pkg/ladata/targets.yaml`](pkg/ladata/targets.yaml); [`cmd/spinehealth`](cmd/spinehealth/main.go) + [`scripts/spinehealth_gate.sh`](scripts/spinehealth_gate.sh) for pay/ratio coverage | Full **Price Paid** pull and LA mapping; **starts/completions/permissions** series beyond net additions; optional expansion past five pilots |
+| **2 — Model** | Coupled price, pipeline, demand, affordability | **Single-LA** monthly forward + replay ([`cmd/forwardspine`](cmd/forwardspine/main.go), [`cmd/runfromspine`](cmd/runfromspine/main.go), [`pkg/housing`](pkg/housing)); **deterministic** pipeline stock in price drift; **demand–supply pressure** on `forwardspine`; [`cfg/single_la_housing.yaml`](cfg/single_la_housing.yaml) skeleton | **Stochastic** delays and attrition; permissions-driven inflow from real stats; multi-LA coupling (Phase 5 item) |
+| **3 — Learning** | SBI / fitted dynamics from data | **[`cmd/calibratespine`](cmd/calibratespine/main.go)** — deterministic **grid** search minimising RMSE (log price; optional **`-w-log-earnings`**) — not SBI | **SBI** or other inference; smooth PPD-based indices; fit delay/attrition; **validation** vs post-COVID and 2023–25 |
+| **4 — Decision science** | Policy strategies and scenarios | *Not implemented* | Action sets, rate scenarios, outputs for pilots |
+| **5 — Extensions** | Rental, MSOA, national scale, … | *Not implemented* | As in Phase 5 list below |
+
+**Operational note:** there is **no hosted CI** in this repository; quality checks are **`go test ./...`**, optional **`./scripts/spinehealth_gate.sh`** on a locally built spine, and manual runs of the CLIs above.
 
 ---
 
@@ -156,13 +170,15 @@ What exists in this codebase today:
 
 ### 1.6 Initial data scope
 
-- **Geography:** 10–20 local authorities spanning different market types — e.g., a London borough (Tower Hamlets), a commuter belt authority (St Albans), a Northern city (Leeds), a coastal town (Brighton), a rural area (Herefordshire), and affordable areas (Burnley, Blaenau Gwent)
-- **Time window:** 1995–2025 for price dynamics (30 years of Land Registry data); 2006–2025 for supply dynamics
-- **Resolution:** Monthly for prices, quarterly for supply indicators, annual for affordability and demographics
+- **Geography (homark today):** **five** pilot English local authorities in [`pkg/ladata/targets.yaml`](pkg/ladata/targets.yaml) — Tower Hamlets, St Albans, Leeds, Brighton and Hove, Burnley — spanning London, commuter belt, core city, coastal city, and lower-price markets. The **research plan** still envisions growing toward 10–20 LAs (e.g. adding rural or Welsh comparators) once the pipeline is stable.
+- **Time window:** 1995–present for UK HPI monthly series; 2006–07 onward for Table 122 net additions where published; annual affordability/earnings align to calendar year in optional enrichment CSVs.
+- **Resolution:** Monthly on the built spine (`year_month`) for prices and bank rate; annual fields forward-filled onto months where applicable.
 
 ---
 
 ## Phase 2: Model Structure
+
+**Homark status:** the code implements a **single-LA, monthly-step** stochadex stack (log earnings, log price, affordability; forward/replay drivers above). The full **stochastic pipeline** (uncertain delay, uncertain attrition, permissions time series) described below is **design** — current pipeline dynamics are **deterministic** (`PipelineStockValuesFunction` + parameters on `forwardspine` / `calibratespine`).
 
 ### 2.1 State variables
 
@@ -246,6 +262,8 @@ The stochadex simulation tracks a local housing market as a coupled stochastic s
 
 ## Phase 3: Learning from Data
 
+**Homark status:** [`cmd/calibratespine`](cmd/calibratespine/main.go) provides **coarse, deterministic** calibration (grid over selected betas, RMSE vs historical log price, optional joint log-earnings weight). **Simulation-based inference (SBI)**, full **PPD-derived** monthly indices by type, and **fitted** delay/attrition distributions are **not** in the repo yet — they remain the targets of this phase.
+
 ### 3.1 Simulation-based inference
 
 1. **Smooth and aggregate** Land Registry transactions by local authority and property type to produce monthly price indices and transaction volumes. Combine with ASHE earnings and BoE rate data to characterise the historical covariate structure.
@@ -276,6 +294,8 @@ The politically crucial and empirically contested question: **does building more
 ---
 
 ## Phase 4: Decision Science Layer
+
+**Homark status:** **not implemented** — no planning-strategy action sets, scenario runner, or reporting layer in code yet; sections below are the **target** design.
 
 ### 4.1 Policy actions to evaluate
 
@@ -313,6 +333,8 @@ For a given local authority, produce actionable planning recommendations:
 
 ## Phase 5: Extensions
 
+**Homark status:** **not implemented** — roadmap ideas only.
+
 1. **Multi-LA interactions:** Model commuter belt dynamics — prices in St Albans depend on prices in London. Build a network model of connected housing markets where supply in one LA spills demand into neighbours.
 2. **Rental market:** Extend from purchase to rental affordability using VOA private rental data and ONS Index of Private Housing Rental Prices — increasingly relevant as homeownership rates fall.
 3. **Spatial microsimulation:** Disaggregate to MSOA level using the ONS neighbourhood affordability data, enabling ward-level planning recommendations.
@@ -327,8 +349,8 @@ For a given local authority, produce actionable planning recommendations:
 ### Week 1–2: Data acquisition and exploration
 
 - [ ] Download Land Registry Price Paid Data (complete file, 1995–2025) and map to LAs — use `go run ./cmd/fetchspine -fetch-ppd` (multi-GB) plus `dat/raw/nspl.csv`, or keep UK HPI–only spine without PPD columns
-- [x] **ONS affordability + ASHE earnings on the spine:** place `dat/raw/ons_affordability.csv` and/or `dat/raw/earnings_annual.csv`, or pass `-ons-csv-url` / `-earnings-csv-url` to `fetchspine` (direct export URLs from ONS/NOMIS change over time—paste the link you get from the portal). Required shape: **area** column (`area_code`, `geography_code`, `lad_code`, …), **year**, **value** (`median_ratio` / `median_gross_annual_pay` or NOMIS-style `obs_value`). After each build, `fetchspine` prints **pay + ratio coverage** per pilot LA. **Coverage gate:** run `./scripts/spinehealth_gate.sh` on `dat/processed/spine_monthly.csv` (95% pay + ratio per pilot); optional reference slice `pkg/spine/testdata/spine_pilot_enrichment_fixture.csv`.
-- [ ] Download MHCLG Live Tables on net additional dwellings and housing starts/completions by LA (Table 122 net additions is automated; starts/completions not wired yet)
+- [x] **ONS affordability + ASHE-style earnings on the spine (pipeline):** [`pkg/spine`](pkg/spine) loaders (`LoadONSAnnual`, `LoadEarningsAnnual`) accept flexible headers; [`cmd/fetchspine`](cmd/fetchspine/main.go) merges annual series into `spine_monthly.csv`; illustrative templates under [`pkg/spine/testdata/enrichment/`](pkg/spine/testdata/enrichment/). **Your machine:** place official `dat/raw/ons_affordability.csv` and/or `dat/raw/earnings_annual.csv` (or `-ons-csv-url` / `-earnings-csv-url`), rebuild, then `./scripts/spinehealth_gate.sh` for ≥95% non-zero **pay** and **ratio** rows per pilot (see [`dat/raw/README.md`](dat/raw/README.md)). Synthetic reference slice: [`pkg/spine/testdata/spine_pilot_enrichment_fixture.csv`](pkg/spine/testdata/spine_pilot_enrichment_fixture.csv); `go test ./pkg/spine/...` includes a coverage check on that fixture.
+- [ ] Wire **MHCLG / DLUHC** housing starts, completions, and planning permissions by LA (Table **122 net additions** is already automated via `fetchspine`; quarterly indicators remain to be ingested)
 - [x] Bank of England Official Bank Rate series — fetched by `go run ./cmd/fetchspine`
 - [x] UK HPI full file for monthly LA-level prices/indices — fetched by `fetchspine`, filtered to pilot LAs in `pkg/ladata/targets.yaml`
 - [x] Select five pilot local authorities spanning different market types — see `pkg/ladata/targets.yaml`
@@ -339,23 +361,24 @@ For a given local authority, produce actionable planning recommendations:
 - [x] Implement a single-LA stochastic skeleton: log earnings and log price as `DriftDiffusionIteration`, affordability as `pkg/housing.AffordabilityFromLogsIteration` — `cfg/single_la_housing.yaml` (hand-set drift/diffusion for forward simulation)
 - [x] Deterministic **replay** of the monthly spine through stochadex (`cmd/runfromspine`, `pkg/housing.ReplayImplementations` + `FromStorageIteration`)
 - [x] **Forward** monthly sim with spine **bank rate**, **net additions FY**, and optional **pipeline stock** driving log-price drift (`cmd/forwardspine`, `pkg/housing.ForwardSpineConfigs`)
-- [x] **Coarse deterministic calibration** vs historical log price (`cmd/calibratespine`, `pkg/housing/calibrate.go`)
+- [x] **Coarse deterministic calibration** vs historical log price (`cmd/calibratespine`, `pkg/housing/calibrate.go`), including optional grids for **`demand_supply_pressure`** (`-demand-supply-steps`, `-demand-supply-beta-lo/hi`) and joint **log-earnings** weight (`-w-log-earnings`)
+- [x] Example calibration one-liner: [`scripts/calibrate_pilot_example.sh`](scripts/calibrate_pilot_example.sh)
 - [x] Simple **pipeline stock** dynamics (approvals inflow, fractional completion) wired into forward log-price drift — see `PipelineStockValuesFunction` + `PriceDriftValuesFunction` in `pkg/housing/forward_values.go`; still to do: stochastic delays, permissions data, attrition priors
 - [x] Implement the demand-supply balance as a price pressure term (`ForwardOptions.DemandSupplyPressureBeta`, `-demand-supply-beta` on `forwardspine`)
 - [x] Verify the simulation runs and passes stochadex harnesses — `go test ./pkg/housing/...`; run CLI from repo root: `go run github.com/umbralcalc/stochadex/cmd/stochadex --config cfg/single_la_housing.yaml`
 
 ### Week 5–6: Simulation-based inference
 
-- [ ] Smooth and aggregate Land Registry data into monthly price indices by LA and property type
-- [ ] Set up SBI to learn price dynamics parameters conditional on macroeconomic covariates
-- [ ] Fit the supply pipeline delay and attrition distributions from MHCLG data
+- [ ] Smooth and aggregate Land Registry (or PPD) data into monthly price indices by LA and property type
+- [ ] Set up **SBI** (or equivalent) to learn price dynamics parameters conditional on macroeconomic covariates — **replace or augment** the current `calibratespine` grid
+- [ ] Fit the supply pipeline delay and attrition distributions from MHCLG / DLUHC permissions and completions data
 - [ ] Validate: does the model reproduce the post-COVID boom and 2023–2025 correction?
 
 ### Week 7–8: Decision science layer
 
 - [ ] Implement 3–4 candidate planning strategies as action sets (varying volume, density mix, tenure mix)
-- [ ] Run policy evaluation across interest rate scenarios
-- [ ] Produce initial findings and visualisations for the target local authorities
+- [ ] Run policy evaluation across interest rate scenarios (beyond exogenous BoE paths already readable from the spine in forward sims)
+- [ ] Produce initial findings and visualisations for the pilot local authorities
 - [ ] Write up as a blog post in the "Engineering Smart Actions in Practice" series
 
 ---
