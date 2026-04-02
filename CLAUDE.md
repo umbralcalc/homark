@@ -7,7 +7,7 @@ This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/
 | Path | Role |
 |------|------|
 | `cmd/fetchspine` | CLI: download UK HPI + BoE + optional DLUHC Table 122 ODS into `dat/raw/`, build `dat/processed/spine_monthly.csv` for LAs in `pkg/ladata/targets.yaml`; optional ONS/earnings (`-ons-csv-url`, `-earnings-csv-url` or `dat/raw/*.csv` with flexible headers); prints **pay + median_ratio coverage** per LA after build |
-| `cmd/spinehealth` | Read `spine_monthly.csv` for pilot LAs; report pay/ratio coverage; optional `-min-pay-pct` / `-min-ratio-pct` gate (exit 1) |
+| `cmd/spinehealth` | Read `spine_monthly.csv` for pilot LAs; report pay/ratio coverage; optional `-min-pay-pct` / `-min-ratio-pct` gate (exit 1). Local gate: `./scripts/spinehealth_gate.sh`; reference slice `pkg/spine/testdata/spine_pilot_enrichment_fixture.csv` |
 | `cmd/runfromspine` | Replay one LA’s monthly spine through stochadex `FromStorageIteration` (log earnings, log price, affordability); `-validate` checks against `median_ratio` |
 | `cmd/forwardspine` | Forward sim: `FromStorageIteration` bank/supply; pipeline and `price_drift` as `ValuesFunctionIteration`; `DriftDiffusionIteration` on earnings and log price; `StateTimeStorageOutputFunction` (coordinator calls `Configure` → pre-register + `AppendByIndex` hot path) |
 | `cmd/calibratespine` | Grid search (deterministic forward): optional grids for bank/price drift/supply/**demand–supply pressure** betas; `-w-log-earnings` joint objective |
