@@ -150,8 +150,9 @@ type Row struct {
 	MedianRatio  string
 	NetAddFY     string // net additional dwellings, FY containing this month
 	Earnings     string // median gross annual pay, calendar year
-	PPDMedian    string
-	PPDCount     string
+	PPDMedian           string
+	PPDCount            string
+	PermissionsMonthly  string // permissions_approx_monthly: annual permissions / 12
 }
 
 func (r Row) yearMonth() MonthKey { return monthKeyFromTime(r.Date) }
@@ -161,7 +162,8 @@ type SpineEnrichment struct {
 	MedianRatio    ONSAnnual // calendar year -> median price/earnings ratio (or similar)
 	SupplyNetFY    map[string]map[int]float64
 	EarningsAnnual AnnualString
-	PPDMonthly     map[string]map[MonthKey]PPDAgg
+	PPDMonthly         map[string]map[MonthKey]PPDAgg
+	PermissionsAnnual  AnnualString // calendar year -> raw permissions_granted string; divided by 12 → monthly
 }
 
 // BuildSpine streams ukhpiPath, keeps rows whose AreaCode is in codes, joins bank rates and optional enrichments.
@@ -253,6 +255,15 @@ func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]f
 					}
 				}
 			}
+			if en.PermissionsAnnual != nil {
+				if m, ok := en.PermissionsAnnual[ac]; ok {
+					if s, ok2 := m[cy]; ok2 {
+						if v, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
+							row.PermissionsMonthly = formatFloat(v / 12.0)
+						}
+					}
+				}
+			}
 		}
 		rows = append(rows, row)
 	}
@@ -274,6 +285,7 @@ func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]f
 	outHeader := []string{
 		"Date", "RegionName", "AreaCode", "AveragePrice", "Index", "year_month", "bank_rate_pct",
 		"median_ratio", "net_additional_dwellings_fy", "median_gross_annual_pay", "ppd_median_price", "ppd_sales_count",
+		"permissions_approx_monthly",
 	}
 	if err := w.Write(outHeader); err != nil {
 		return 0, err
@@ -292,6 +304,7 @@ func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]f
 			row.Earnings,
 			row.PPDMedian,
 			row.PPDCount,
+			row.PermissionsMonthly,
 		}
 		if err := w.Write(line); err != nil {
 			return 0, err

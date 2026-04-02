@@ -32,6 +32,8 @@ func main() {
 	onsCSVURL := flag.String("ons-csv-url", envOr("ONS_CSV_URL", ""), "if set, download CSV to dat/raw/ons_affordability.csv (you supply a direct export URL)")
 	earningsCSVURL := flag.String("earnings-csv-url", envOr("EARNINGS_CSV_URL", ""), "if set, download to dat/raw/earnings_annual.csv")
 	nsplZipURL := flag.String("nspl-zip-url", envOr("NSPL_ZIP_URL", ""), "if set, download zip and extract largest .csv to dat/raw/nspl.csv")
+	permissionsPath := flag.String("permissions", "", "optional path to permissions_annual.csv (area_code,year,permissions_granted); default dat/raw/permissions_annual.csv if present")
+	permissionsCSVURL := flag.String("permissions-csv-url", envOr("PERMISSIONS_CSV_URL", ""), "if set, download to dat/raw/permissions_annual.csv")
 	flag.Parse()
 
 	repo, err := filepath.Abs(*root)
@@ -104,6 +106,14 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if *permissionsCSVURL != "" {
+		dest := filepath.Join(raw, "permissions_annual.csv")
+		fmt.Println("Downloading permissions CSV …")
+		if err := spine.Download(client, *permissionsCSVURL, dest); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 	if *nsplZipURL != "" {
 		zpath := filepath.Join(raw, "nspl_download.zip")
 		fmt.Println("Downloading NSPL zip …")
@@ -171,6 +181,21 @@ func main() {
 	}
 	if earnFile != "" {
 		en.EarningsAnnual, err = spine.LoadEarningsAnnual(earnFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
+	permFile := *permissionsPath
+	if permFile == "" {
+		def := filepath.Join(raw, "permissions_annual.csv")
+		if _, err := os.Stat(def); err == nil {
+			permFile = def
+		}
+	}
+	if permFile != "" {
+		en.PermissionsAnnual, err = spine.LoadPermissionsAnnual(permFile)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)

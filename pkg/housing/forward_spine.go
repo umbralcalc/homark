@@ -72,9 +72,21 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 
 	bankData := make([][]float64, len(obs))
 	supplyData := make([][]float64, len(obs))
+	approvalsData := make([][]float64, len(obs))
+	hasPermissions := false
 	for i := range obs {
 		bankData[i] = []float64{obs[i].BankRatePct}
 		supplyData[i] = []float64{obs[i].NetAddFY}
+		approvalsData[i] = []float64{obs[i].PermissionsMonthly}
+		if obs[i].PermissionsMonthly > 0 {
+			hasPermissions = true
+		}
+	}
+	// Fall back to constant approval rate when no permissions data in spine.
+	if !hasPermissions {
+		for i := range approvalsData {
+			approvalsData[i] = []float64{opt.ApprovalRate}
+		}
 	}
 
 	supplyScale := opt.SupplyScale
@@ -122,8 +134,10 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 			Params: simulator.NewParams(map[string][]float64{
 				"completion_rate": {compFrac},
 				"attrition_rate":  {opt.AttritionRate},
-				"approval_rate":   {opt.ApprovalRate},
 			}),
+			ParamsFromUpstream: map[string]simulator.NamedUpstreamConfig{
+				"approval_rate": {Upstream: "approvals"},
+			},
 			InitStateValues:   []float64{opt.PipelineInit},
 			Seed:              opt.SeedPipeline,
 			StateHistoryDepth: 2,
@@ -187,6 +201,20 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 		Seed:              0,
 		StateHistoryDepth: 2,
 	})
+
+	// approvals partition: supplies approval_rate to the stochastic pipeline each step.
+	// Uses permissions_approx_monthly from spine when available; falls back to constant opt.ApprovalRate.
+	// Only added when the stochastic pipeline is active (SeedPipeline > 0).
+	if opt.SeedPipeline > 0 {
+		g.SetPartition(&simulator.PartitionConfig{
+			Name:              "approvals",
+			Iteration:         &general.FromStorageIteration{Data: approvalsData, InitStepsTaken: fromStorageTimeOffset},
+			Params:            simulator.NewParams(map[string][]float64{}),
+			InitStateValues:   []float64{approvalsData[0][0]},
+			Seed:              0,
+			StateHistoryDepth: 2,
+		})
+	}
 
 	settings, impl := g.GenerateConfigs()
 	return settings, impl, nil

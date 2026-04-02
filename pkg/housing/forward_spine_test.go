@@ -45,6 +45,47 @@ func TestForwardSpineWithDemandSupplyPressureHarness(t *testing.T) {
 	}
 }
 
+func TestStochasticForwardSpineWithPermissionsHarness(t *testing.T) {
+	// Stochastic pipeline with permissions data wired via approvals partition.
+	obs := []spine.MonthlyObservation{
+		{YearMonth: "2010-01", AveragePrice: 150e3, MedianRatio: 7.0, BankRatePct: 0.5, PermissionsMonthly: 25},
+		{YearMonth: "2010-02", AveragePrice: 151e3, MedianRatio: 7.0, BankRatePct: 0.5, PermissionsMonthly: 28},
+		{YearMonth: "2010-03", AveragePrice: 152e3, MedianRatio: 7.0, BankRatePct: 0.5, PermissionsMonthly: 22},
+	}
+	opt := DefaultForwardOptions()
+	opt.SeedPipeline = 7001
+	opt.PipelineInit = 100
+	opt.CompletionFrac = 0.15
+	opt.AttritionRate = 0.02
+	settings, impl, err := ForwardSpineConfigs(obs, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := simulator.RunWithHarnesses(settings, impl); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStochasticForwardSpineConstantApprovalFallback(t *testing.T) {
+	// When no permissions data is present, approvals partition uses constant opt.ApprovalRate.
+	obs := []spine.MonthlyObservation{
+		{YearMonth: "2010-01", AveragePrice: 150e3, MedianRatio: 7.0, BankRatePct: 0.5},
+		{YearMonth: "2010-02", AveragePrice: 151e3, MedianRatio: 7.0, BankRatePct: 0.5},
+		{YearMonth: "2010-03", AveragePrice: 152e3, MedianRatio: 7.0, BankRatePct: 0.5},
+	}
+	opt := DefaultForwardOptions()
+	opt.SeedPipeline = 7002
+	opt.ApprovalRate = 30
+	opt.PipelineInit = 80
+	settings, impl, err := ForwardSpineConfigs(obs, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := simulator.RunWithHarnesses(settings, impl); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDeterministicForwardLogSeriesShape(t *testing.T) {
 	// Constant bank rate: drift should equal drift_base when bank_drift_beta = 0.
 	obs := []spine.MonthlyObservation{

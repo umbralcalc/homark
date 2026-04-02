@@ -116,11 +116,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Detect optional partitions present only in the stochastic path.
+	storeNames := make(map[string]struct{})
+	for _, n := range store.GetNames() {
+		storeNames[n] = struct{}{}
+	}
+	hasApprovals := false
+	if _, ok := storeNames["approvals"]; ok {
+		hasApprovals = true
+	}
+
 	w := csv.NewWriter(os.Stdout)
-	_ = w.Write([]string{
+	header := []string{
 		"step", "time", "year_month", "bank_rate_pct", "net_add_fy", "pipeline_stock",
 		"log_earnings", "log_price", "affordability",
-	})
+	}
+	if hasApprovals {
+		header = append(header, "approvals_monthly")
+	}
+	_ = w.Write(header)
 	times := store.GetTimes()
 	vB := store.GetValues("bank_rate")
 	vS := store.GetValues("supply_net")
@@ -128,12 +142,16 @@ func main() {
 	vE := store.GetValues("log_earnings")
 	vP := store.GetValues("log_price")
 	vA := store.GetValues("affordability")
+	var vAp [][][]float64
+	if hasApprovals {
+		vAp = append(vAp, store.GetValues("approvals"))
+	}
 	for i := range times {
 		ym := ""
 		if i < len(obs) {
 			ym = obs[i].YearMonth
 		}
-		_ = w.Write([]string{
+		row := []string{
 			fmt.Sprintf("%d", i+1),
 			fmtFloat(times[i]),
 			ym,
@@ -143,7 +161,11 @@ func main() {
 			fmtFloat(vE[i][0]),
 			fmtFloat(vP[i][0]),
 			fmtFloat(vA[i][0]),
-		})
+		}
+		if hasApprovals {
+			row = append(row, fmtFloat(vAp[0][i][0]))
+		}
+		_ = w.Write(row)
 	}
 	w.Flush()
 	if err := w.Error(); err != nil {
