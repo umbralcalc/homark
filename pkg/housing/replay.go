@@ -36,13 +36,18 @@ func MonthlyLogSeries(obs []spine.MonthlyObservation) (logE, logP, afford [][]fl
 }
 
 func logPriceFromObs(o spine.MonthlyObservation) (float64, error) {
+	// Prefer PPD median when present — it is a direct local transaction median rather than
+	// the mix-adjusted HPI average, giving a more LA-specific price signal.
+	if o.PPDMedianPrice > 0 {
+		return math.Log(o.PPDMedianPrice), nil
+	}
 	if o.AveragePrice > 0 {
 		return math.Log(o.AveragePrice), nil
 	}
 	if o.Index > 0 {
 		return math.Log(o.Index), nil
 	}
-	return 0, fmt.Errorf("need AveragePrice or Index")
+	return 0, fmt.Errorf("need PPDMedianPrice, AveragePrice, or Index")
 }
 
 func logEarningsFromObs(o spine.MonthlyObservation, logP float64) (float64, error) {

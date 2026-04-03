@@ -24,14 +24,14 @@ What exists in this codebase today:
 - **Deterministic grid calibration:** [`cmd/calibratespine`](cmd/calibratespine/main.go) searches `bank_beta` and optional grids for `price_drift`, `supply_beta`, and **`demand_supply_pressure`** (`-demand-supply-steps`, `-demand-supply-beta-lo/hi`) to minimise RMSE of **log price** vs a filled historical series (`ForwardFillAffordableFields` + `MonthlyLogSeries`), with optional **joint** weight on log-earnings RMSE (`-w-log-earnings`). Uses zero diffusion for a smooth objective; re-enable diffusion when running `forwardspine` with the printed coefficients.
 - **Spine enrichment coverage gate (local):** [`scripts/spinehealth_gate.sh`](scripts/spinehealth_gate.sh) runs [`cmd/spinehealth`](cmd/spinehealth/main.go) with **`-min-pay-pct 95`** and **`-min-ratio-pct 95`** on `dat/processed/spine_monthly.csv` (or pass another spine path). A synthetic reference slice for all pilot LAs lives at [`pkg/spine/testdata/spine_pilot_enrichment_fixture.csv`](pkg/spine/testdata/spine_pilot_enrichment_fixture.csv) (not official statistics—shape/coverage check only). [`scripts/calibrate_pilot_example.sh`](scripts/calibrate_pilot_example.sh) is a worked example for [`cmd/calibratespine`](cmd/calibratespine/main.go).
 
-**Still to do (see phases below):** full SBI / posteriors and the decision-science policy layer.
+**Still to do (see phases below):** the decision-science policy layer (Phase 4).
 
 ### Near-term workflow (pilot data + calibration)
 
 1. **Optional bootstrap:** copy illustrative templates from `pkg/spine/testdata/enrichment/*.csv` into `dat/raw/` (see [`dat/raw/README.md`](dat/raw/README.md)), then replace with real NOMIS/ONS exports when available.
 2. **Build spine:** `go run ./cmd/fetchspine` (or `-skip-download` if HPI/BoE/raw files already exist). Check printed **pay** and **median_ratio** coverage per LA.
 3. **Audit coverage:** `go run ./cmd/spinehealth` on the built spine, or `./scripts/spinehealth_gate.sh` (95% pay + ratio for every pilot LA) after placing official exports in `dat/raw/` and rebuilding.
-4. **Calibrate:** e.g. [`scripts/calibrate_pilot_example.sh`](scripts/calibrate_pilot_example.sh) or `go run ./cmd/calibratespine -la "Leeds" -demand-supply-steps 5 -demand-supply-beta-lo -0.02 -demand-supply-beta-hi 0.02 -w-log-earnings 0.25`, then run `forwardspine` with the printed coefficients.
+4. **Calibrate:** grid search via [`scripts/calibrate_pilot_example.sh`](scripts/calibrate_pilot_example.sh), or ES optimisation: `go run ./cmd/calibratespine -la "Leeds" -es-steps 400`, then run `forwardspine` with the printed coefficients.
 
 ### Roadmap vs repository (living plan)
 
@@ -41,8 +41,8 @@ This table ties the **phases below** to what **actually exists in homark** today
 |-------|-------------|-----------------|-------------------------|
 | **1 — Data** | Ingest transactions, affordability, supply, context | **UK HPI + BoE + Table 122** via [`cmd/fetchspine`](cmd/fetchspine/main.go); **optional** ONS affordability + ASHE-style earnings CSVs, PPD+NSPL, **permissions** (`permissions_approx_monthly` column, `-permissions` flag), URLs on CLI; **five pilot LAs** in [`pkg/ladata/targets.yaml`](pkg/ladata/targets.yaml); [`cmd/spinehealth`](cmd/spinehealth/main.go) + [`scripts/spinehealth_gate.sh`](scripts/spinehealth_gate.sh) for pay/ratio coverage | Full **Price Paid** pull and LA mapping; optional expansion past five pilots |
 | **2 — Model** | Coupled price, pipeline, demand, affordability | **Single-LA** monthly forward + replay ([`cmd/forwardspine`](cmd/forwardspine/main.go), [`cmd/runfromspine`](cmd/runfromspine/main.go), [`pkg/housing`](pkg/housing)); **stochastic** pipeline ([`StochasticPipelineIteration`](pkg/housing/pipeline.go)) with binomial completions and attrition; **permissions-driven inflow** via `approvals` partition (wired from `permissions_approx_monthly` spine column or constant fallback); **demand–supply pressure** on `forwardspine`; [`cfg/single_la_housing.yaml`](cfg/single_la_housing.yaml) skeleton | Multi-LA coupling (Phase 5 item) |
-| **3 — Learning** | SBI / fitted dynamics from data | **[`cmd/calibratespine`](cmd/calibratespine/main.go)** — deterministic **grid** search minimising RMSE (log price; optional **`-w-log-earnings`**) — not SBI | **SBI** or other inference; smooth PPD-based indices; fit delay/attrition; **validation** vs post-COVID and 2023–25 |
-| **4 — Decision science** | Policy strategies and scenarios | *Not implemented* | Action sets, rate scenarios, outputs for pilots |
+| **3 — Learning** | SBI / fitted dynamics from data | **Complete.** [`cmd/calibratespine`](cmd/calibratespine/main.go) offers two calibration paths: (1) **grid search** — deterministic RMSE over bank/price-drift/supply/demand-supply/completion-frac/earnings-drift betas, optional `-w-log-earnings` joint objective; (2) **Evolution Strategy** (`-es-steps N`) — `analysis.NewEvolutionStrategyOptimisationPartitions` over 6-parameter theta vector, returns `ThetaMean` + `ThetaCov` (Gaussian posterior), `ESResult.Best` point estimate. Also: **Gaussian log-likelihood + AIC** (`ComputeCalibrationStats`); **`-validate-months N`** temporal holdout; **`-laplace`** Laplace posterior via numerical Hessian; **PPD-based price** (`MonthlyObservation.PPDMedianPrice` preferred in `logPriceFromObs`). | Multi-LA coupling (Phase 5 item) |
+| **4 — Decision science** | Policy strategies and scenarios | *Not implemented* | `cmd/policyscenario`: approval-rate action sets, affordability trajectory ensembles, rate scenario fans, uncertainty propagation via `ThetaCov` samples |
 | **5 — Extensions** | Rental, MSOA, national scale, … | *Not implemented* | As in Phase 5 list below |
 
 **Operational note:** there is **no hosted CI** in this repository; quality checks are **`go test ./...`**, optional **`./scripts/spinehealth_gate.sh`** on a locally built spine, and manual runs of the CLIs above.
@@ -262,7 +262,7 @@ The stochadex simulation tracks a local housing market as a coupled stochastic s
 
 ## Phase 3: Learning from Data
 
-**Homark status:** [`cmd/calibratespine`](cmd/calibratespine/main.go) provides **coarse, deterministic** calibration (grid over selected betas, RMSE vs historical log price, optional joint log-earnings weight). **Simulation-based inference (SBI)**, full **PPD-derived** monthly indices by type, and **fitted** delay/attrition distributions are **not** in the repo yet — they remain the targets of this phase.
+**Homark status:** Phase 3 is complete. [`cmd/calibratespine`](cmd/calibratespine/main.go) provides two calibration paths: a **deterministic grid search** (RMSE over up to six parameter dimensions, optional joint log-earnings weight, `-validate-months` temporal holdout, `-laplace` posterior variance) and an **Evolution Strategy optimiser** (`-es-steps N`) built on `analysis.NewEvolutionStrategyOptimisationPartitions`. The ES path optimises the 6-parameter theta vector `[bank_beta, price_drift, supply_beta, demand_supply_beta, completion_frac, earnings_drift]` and returns both a **point estimate** (`ESResult.Best`) and a **Gaussian posterior** (`ThetaMean` / `ThetaCov`). PPD-derived prices (`ppd_median_price`) are preferred when present. Fitted delay/attrition distributions and multi-type property indices remain Phase 5 items.
 
 ### 3.1 Simulation-based inference
 
@@ -295,7 +295,7 @@ The politically crucial and empirically contested question: **does building more
 
 ## Phase 4: Decision Science Layer
 
-**Homark status:** **not implemented** — no planning-strategy action sets, scenario runner, or reporting layer in code yet; sections below are the **target** design.
+**Homark status:** **not implemented** — no planning-strategy action sets, scenario runner, or reporting layer in code yet; sections below are the **target** design. The calibration layer (Phase 3) now provides the `ESResult.Best` point estimate and `ThetaCov` covariance needed to drive uncertainty-propagated policy ensembles.
 
 ### 4.1 Policy actions to evaluate
 
@@ -369,9 +369,11 @@ For a given local authority, produce actionable planning recommendations:
 
 ### Week 5–6: Simulation-based inference
 
-- [ ] Smooth and aggregate Land Registry (or PPD) data into monthly price indices by LA and property type
-- [ ] Set up **SBI** (or equivalent) to learn price dynamics parameters conditional on macroeconomic covariates — **replace or augment** the current `calibratespine` grid
-- [ ] Fit the supply pipeline delay and attrition distributions from MHCLG / DLUHC permissions and completions data
+- [x] Set up **ES optimisation** (`analysis.NewEvolutionStrategyOptimisationPartitions`) to learn price dynamics parameters — `cmd/calibratespine -es-steps N` returns `ThetaMean`, `ThetaCov`, and `ESResult.Best`
+- [x] **Gaussian posterior** from ES covariance; `-laplace` flag for Hessian-based alternative; `-validate-months` temporal holdout
+- [x] **PPD-based price indices** — `MonthlyObservation.PPDMedianPrice` from `ppd_median_price` spine column
+- [ ] Smooth and aggregate Land Registry PPD into monthly indices **by property type** (detached/semi/terraced/flat)
+- [ ] Fit supply pipeline **delay and attrition distributions** from MHCLG/DLUHC permissions and completions data
 - [ ] Validate: does the model reproduce the post-COVID boom and 2023–2025 correction?
 
 ### Week 7–8: Decision science layer

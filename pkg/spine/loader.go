@@ -24,6 +24,7 @@ type MonthlyObservation struct {
 	EarningsAnnual float64 // 0 = missing (ASHE-style gross pay)
 	NetAddFY           float64 // 0 = missing (net additional dwellings, FY label on spine row)
 	PermissionsMonthly float64 // 0 = missing (annual permissions / 12)
+	PPDMedianPrice     float64 // 0 = missing (Price Paid Data local median transaction price)
 }
 
 func parseFloatOK(s string) (float64, bool) {
@@ -122,6 +123,9 @@ func parseSpineMonthlyCSV(r io.Reader, wantArea string) ([]MonthlyObservation, e
 		}
 		if v, ok := parseFloatOK(get(rec, "permissions_approx_monthly")); ok {
 			o.PermissionsMonthly = v
+		}
+		if v, ok := parseFloatOK(get(rec, "ppd_median_price")); ok {
+			o.PPDMedianPrice = v
 		}
 		if o.YearMonth == "" {
 			o.YearMonth = string(monthKeyFromTime(dt))
