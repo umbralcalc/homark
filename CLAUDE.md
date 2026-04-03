@@ -13,10 +13,11 @@ This repository (**homark**) uses the [stochadex](https://github.com/umbralcalc/
 | `cmd/runfromspine` | Replay one LA’s monthly spine through stochadex `FromStorageIteration` (log earnings, log price, affordability); `-validate` checks against `median_ratio` |
 | `cmd/forwardspine` | Forward sim: `FromStorageIteration` bank/supply; pipeline and `price_drift` as `ValuesFunctionIteration`; `DriftDiffusionIteration` on earnings and log price; `StateTimeStorageOutputFunction` (coordinator calls `Configure` → pre-register + `AppendByIndex` hot path) |
 | `cmd/calibratespine` | Grid search or **`-es-steps`** ES calibration; **`-es-json-out`** writes `theta_mean` + `theta_cov` for `policyscenario`; `-w-log-earnings`, `-validate-months`, `-laplace` |
+| `cmd/credibilityreport` | PPD–HPI correlations (all-type + D/S/T/F), permissions→completions lag scan (`-lag-max`); optional `-validate-months` + same grid flags as `calibratespine` for train/test stats |
 | `cmd/policyscenario` | Phase 4 MVP: grid of **`-approvals`**, **`-bank-scales`**, optional **`-posterior`** JSON + **`-posterior-samples`**; deterministic forward; CSV affordability stats |
 | `pkg/ladata` | Embedded pilot LA list (`targets.yaml`) and `LoadTargets()` |
-| `pkg/spine` | HTTP download, BoE monthly means, UK HPI filter/join, Table 122, optional ONS/earnings/PPD enrichment (`LoadONSAnnual`, `LoadEarningsAnnual` with NOMIS-style column aliases), `PilotSpineCoverage` / `MedianPayCoverageByArea`, illustrative templates under `testdata/enrichment/`, `LoadSpineMonthlyForArea`, `BuildSpine` |
-| `pkg/housing` | `AffordabilityFromLogsIteration`; `ForwardSpineConfigs` / `forward_values.go`; `MonthlyLogSeries` + `ReplayImplementations`; `policy.go` (posterior JSON, `SampleThetaGaussian`, bank-rate scenario clone); ES in `es_calibrate.go` |
+| `pkg/spine` | HTTP download, BoE monthly means, UK HPI filter/join, Table 122, optional ONS/earnings/PPD (all-type + per-type D/S/T/F) + completions annual (`LoadCompletionsAnnual`) + permissions, `PilotSpineCoverage` / `MedianPayCoverageByArea`, templates under `testdata/enrichment/`, `LoadSpineMonthlyForArea`, `BuildSpine` |
+| `pkg/housing` | `AffordabilityFromLogsIteration`; `ForwardSpineConfigs` / `forward_values.go`; `MonthlyLogSeries` + `ReplayImplementations`; `policy.go` (posterior JSON, `SampleThetaGaussian`, bank-rate scenario clone); ES in `es_calibrate.go`; `credibility.go` (Pearson, PPD–HPI, permissions–completions lag) |
 | `cfg/single_la_housing.yaml` | Minimal monthly-step simulation wired to `pkg/housing` + stochadex `continuous` |
 | `dat/raw`, `dat/processed` | Local data (gitignored except `dat/.gitignore`); do not commit bulk CSVs |
 | `scripts/spinehealth_gate.sh` | Local 95% / 95% pay+ratio gate via `spinehealth` on `dat/processed/spine_monthly.csv` (or pass another spine path) |
@@ -39,6 +40,8 @@ go run ./cmd/runfromspine -list
 go run ./cmd/runfromspine -la "Leeds" -validate
 go run ./cmd/forwardspine -la "Leeds" -bank-beta -0.02 -supply-beta -1e-5
 go run ./cmd/calibratespine -la "Leeds" -bank-steps 21
+go run ./cmd/credibilityreport -la "Leeds" -lag-max 24
+go run ./cmd/credibilityreport -la "Leeds" -validate-months 12 -bank-steps 21
 go run ./cmd/calibratespine -la "Leeds" -es-steps 400 -es-json-out posteriors/leeds.json
 go run ./cmd/policyscenario -la "Leeds" -posterior posteriors/leeds.json -approvals 0,100 -bank-scales 1,1.05 -posterior-samples 20
 go run ./cmd/spinehealth -root .

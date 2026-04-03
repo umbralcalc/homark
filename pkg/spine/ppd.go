@@ -104,10 +104,33 @@ func LoadNSPLPostcodeToLAD(path string) (map[string]string, error) {
 	return out, nil
 }
 
+// PPDByTypeBuckets holds monthly price lists for all sales and per LR property type (D,S,T,F).
+type PPDByTypeBuckets struct {
+	All map[string]map[MonthKey][]float64
+	// Typed[lad][month]["D"|"S"|"T"|"F"] — only standard types; other LR codes are counted in All only.
+	Typed map[string]map[MonthKey]map[string][]float64
+}
+
+// PPDTypeMonthAgg is monthly PPD medians: All sales plus detached/semi/terraced/flat when sample exists.
+type PPDTypeMonthAgg struct {
+	All              PPDAgg
+	Detached, Semi   PPDAgg
+	Terraced, Flat   PPDAgg
+}
+
 // AggregatePricePaid streams Land Registry Price Paid CSV, maps postcodes to LAD via nspl,
 // keeps rows in codes, buckets by calendar month, computes median price and count.
 // Expected headers include price, date, postcode (case-insensitive).
 func AggregatePricePaid(ppdPath, nsplPath string, codes map[string]struct{}) (map[string]map[MonthKey][]float64, error) {
+	full, err := AggregatePricePaidByType(ppdPath, nsplPath, codes)
+	if err != nil {
+		return nil, err
+	}
+	return full.All, nil
+}
+
+// AggregatePricePaidByType is like AggregatePricePaid but also buckets by Property type (D,S,T,F) when present.
+func AggregatePricePaidByType(ppdPath, nsplPath string, codes map[string]struct{}) (*PPDByTypeBuckets, error) {
 	pcToLAD, err := LoadNSPLPostcodeToLAD(nsplPath)
 	if err != nil {
 		return nil, err
@@ -136,8 +159,12 @@ func AggregatePricePaid(ppdPath, nsplPath string, codes map[string]struct{}) (ma
 	if !ok1 || !ok2 || !ok3 {
 		return nil, fmt.Errorf("ppd: need columns price, date/date of transfer, postcode")
 	}
-	// buckets[lad][month] = prices
-	buckets := make(map[string]map[MonthKey][]float64)
+	propI := ppdPropertyTypeColumn(idx)
+
+	out := &PPDByTypeBuckets{
+		All:   make(map[string]map[MonthKey][]float64),
+		Typed: make(map[string]map[MonthKey]map[string][]float64),
+	}
 	for {
 		rec, err := cr.Read()
 		if err == io.EOF {
@@ -164,7 +191,6 @@ func AggregatePricePaid(ppdPath, nsplPath string, codes map[string]struct{}) (ma
 		ds := strings.TrimSpace(rec[dateI])
 		dt, ok := parseHPIDate(ds)
 		if !ok {
-			// try ISO
 			if t2, e2 := parsePPDDateAlt(ds); e2 == nil {
 				dt = t2
 				ok = true
@@ -174,12 +200,53 @@ func AggregatePricePaid(ppdPath, nsplPath string, codes map[string]struct{}) (ma
 			continue
 		}
 		mk := monthKeyFromTime(dt)
-		if buckets[lad] == nil {
-			buckets[lad] = make(map[MonthKey][]float64)
+		if out.All[lad] == nil {
+			out.All[lad] = make(map[MonthKey][]float64)
 		}
-		buckets[lad][mk] = append(buckets[lad][mk], price)
+		out.All[lad][mk] = append(out.All[lad][mk], price)
+
+		if propI >= 0 && propI < len(rec) {
+			pt := normalizeLRPropertyType(rec[propI])
+			if pt == "D" || pt == "S" || pt == "T" || pt == "F" {
+				if out.Typed[lad] == nil {
+					out.Typed[lad] = make(map[MonthKey]map[string][]float64)
+				}
+				if out.Typed[lad][mk] == nil {
+					out.Typed[lad][mk] = make(map[string][]float64)
+				}
+				out.Typed[lad][mk][pt] = append(out.Typed[lad][mk][pt], price)
+			}
+		}
 	}
-	return buckets, nil
+	return out, nil
+}
+
+func ppdPropertyTypeColumn(idx map[string]int) int {
+	for _, name := range []string{
+		"property type", "propertytype", "type",
+	} {
+		if j, ok := idx[name]; ok {
+			return j
+		}
+	}
+	return -1
+}
+
+// normalizeLRPropertyType maps Land Registry PPD values to D, S, T, F, or "".
+func normalizeLRPropertyType(s string) string {
+	u := strings.ToUpper(strings.TrimSpace(s))
+	switch u {
+	case "D", "DETACHED":
+		return "D"
+	case "S", "SEMI-DETACHED", "SEMI-DETACHED HOUSE":
+		return "S"
+	case "T", "TERRACED", "TERRACED HOUSE":
+		return "T"
+	case "F", "FLAT", "FLAT/MAISONETTE":
+		return "F"
+	default:
+		return ""
+	}
 }
 
 func parsePPDDateAlt(s string) (t time.Time, err error) {
@@ -198,18 +265,61 @@ func PPDBucketsToAgg(b map[string]map[MonthKey][]float64) map[string]map[MonthKe
 	for lad, byM := range b {
 		out[lad] = make(map[MonthKey]PPDAgg)
 		for mk, prices := range byM {
-			n := len(prices)
-			if n == 0 {
-				continue
-			}
-			sort.Float64s(prices)
-			med := prices[n/2]
-			if n%2 == 0 {
-				med = (prices[n/2-1] + prices[n/2]) / 2
-			}
-			out[lad][mk] = PPDAgg{
-				MedianPrice: formatFloat(med),
-				SalesCount:  strconv.Itoa(n),
+			out[lad][mk] = ppdPricesToAgg(prices)
+		}
+	}
+	return out
+}
+
+func ppdPricesToAgg(prices []float64) PPDAgg {
+	n := len(prices)
+	if n == 0 {
+		return PPDAgg{}
+	}
+	sort.Float64s(prices)
+	med := prices[n/2]
+	if n%2 == 0 {
+		med = (prices[n/2-1] + prices[n/2]) / 2
+	}
+	return PPDAgg{
+		MedianPrice: formatFloat(med),
+		SalesCount:  strconv.Itoa(n),
+	}
+}
+
+// PPDBucketsByTypeToAgg converts PPDByTypeBuckets to typed monthly aggregates for BuildSpine.
+func PPDBucketsByTypeToAgg(b *PPDByTypeBuckets) map[string]map[MonthKey]PPDTypeMonthAgg {
+	out := make(map[string]map[MonthKey]PPDTypeMonthAgg)
+	merge := func(lad string, mk MonthKey, upd func(*PPDTypeMonthAgg)) {
+		if out[lad] == nil {
+			out[lad] = make(map[MonthKey]PPDTypeMonthAgg)
+		}
+		cur := out[lad][mk]
+		upd(&cur)
+		out[lad][mk] = cur
+	}
+	for lad, byM := range b.All {
+		for mk, prices := range byM {
+			agg := ppdPricesToAgg(prices)
+			merge(lad, mk, func(p *PPDTypeMonthAgg) { p.All = agg })
+		}
+	}
+	for lad, byM := range b.Typed {
+		for mk, byT := range byM {
+			for typ, prices := range byT {
+				agg := ppdPricesToAgg(prices)
+				merge(lad, mk, func(p *PPDTypeMonthAgg) {
+					switch typ {
+					case "D":
+						p.Detached = agg
+					case "S":
+						p.Semi = agg
+					case "T":
+						p.Terraced = agg
+					case "F":
+						p.Flat = agg
+					}
+				})
 			}
 		}
 	}

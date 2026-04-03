@@ -23,8 +23,17 @@ type MonthlyObservation struct {
 	MedianRatio    float64 // 0 = missing (ONS affordability)
 	EarningsAnnual float64 // 0 = missing (ASHE-style gross pay)
 	NetAddFY           float64 // 0 = missing (net additional dwellings, FY label on spine row)
-	PermissionsMonthly float64 // 0 = missing (annual permissions / 12)
-	PPDMedianPrice     float64 // 0 = missing (Price Paid Data local median transaction price)
+	PermissionsMonthly   float64 // 0 = missing (annual permissions / 12)
+	CompletionsMonthly   float64 // 0 = missing (annual completions / 12)
+	PPDMedianPrice       float64 // 0 = missing (all types)
+	PPDMedianDetached    float64
+	PPDSalesDetached     float64
+	PPDMedianSemi        float64
+	PPDSalesSemi         float64
+	PPDMedianTerraced    float64
+	PPDSalesTerraced     float64
+	PPDMedianFlat        float64
+	PPDSalesFlat         float64
 }
 
 func parseFloatOK(s string) (float64, bool) {
@@ -126,6 +135,33 @@ func parseSpineMonthlyCSV(r io.Reader, wantArea string) ([]MonthlyObservation, e
 		}
 		if v, ok := parseFloatOK(get(rec, "ppd_median_price")); ok {
 			o.PPDMedianPrice = v
+		}
+		if v, ok := parseFloatOK(get(rec, "ppd_median_d")); ok {
+			o.PPDMedianDetached = v
+		}
+		if v, ok := parseFloatOK(get(rec, "ppd_sales_d")); ok {
+			o.PPDSalesDetached = v
+		}
+		if v, ok := parseFloatOK(get(rec, "ppd_median_s")); ok {
+			o.PPDMedianSemi = v
+		}
+		if v, ok := parseFloatOK(get(rec, "ppd_sales_s")); ok {
+			o.PPDSalesSemi = v
+		}
+		if v, ok := parseFloatOK(get(rec, "ppd_median_t")); ok {
+			o.PPDMedianTerraced = v
+		}
+		if v, ok := parseFloatOK(get(rec, "ppd_sales_t")); ok {
+			o.PPDSalesTerraced = v
+		}
+		if v, ok := parseFloatOK(get(rec, "ppd_median_f")); ok {
+			o.PPDMedianFlat = v
+		}
+		if v, ok := parseFloatOK(get(rec, "ppd_sales_f")); ok {
+			o.PPDSalesFlat = v
+		}
+		if v, ok := parseFloatOK(get(rec, "completions_approx_monthly")); ok {
+			o.CompletionsMonthly = v
 		}
 		if o.YearMonth == "" {
 			o.YearMonth = string(monthKeyFromTime(dt))

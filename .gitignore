@@ -10,4 +10,7 @@ runfromspine
 policyscenario
 !cmd/policyscenario/
 
+credibilityreport
+!cmd/credibilityreport/
+
 posteriors/*

@@ -34,6 +34,8 @@ func main() {
 	nsplZipURL := flag.String("nspl-zip-url", envOr("NSPL_ZIP_URL", ""), "if set, download zip and extract largest .csv to dat/raw/nspl.csv")
 	permissionsPath := flag.String("permissions", "", "optional path to permissions_annual.csv (area_code,year,permissions_granted); default dat/raw/permissions_annual.csv if present")
 	permissionsCSVURL := flag.String("permissions-csv-url", envOr("PERMISSIONS_CSV_URL", ""), "if set, download to dat/raw/permissions_annual.csv")
+	completionsPath := flag.String("completions", "", "optional path to completions_annual.csv (area_code,year,dwelling_completions); default dat/raw/completions_annual.csv if present")
+	completionsCSVURL := flag.String("completions-csv-url", envOr("COMPLETIONS_CSV_URL", ""), "if set, download to dat/raw/completions_annual.csv")
 	flag.Parse()
 
 	repo, err := filepath.Abs(*root)
@@ -110,6 +112,14 @@ func main() {
 		dest := filepath.Join(raw, "permissions_annual.csv")
 		fmt.Println("Downloading permissions CSV …")
 		if err := spine.Download(client, *permissionsCSVURL, dest); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+	if *completionsCSVURL != "" {
+		dest := filepath.Join(raw, "completions_annual.csv")
+		fmt.Println("Downloading completions CSV …")
+		if err := spine.Download(client, *completionsCSVURL, dest); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -202,6 +212,21 @@ func main() {
 		}
 	}
 
+	compFile := *completionsPath
+	if compFile == "" {
+		def := filepath.Join(raw, "completions_annual.csv")
+		if _, err := os.Stat(def); err == nil {
+			compFile = def
+		}
+	}
+	if compFile != "" {
+		en.CompletionsAnnual, err = spine.LoadCompletionsAnnual(compFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+
 	ppd := *ppdPath
 	if ppd == "" {
 		def := filepath.Join(raw, "price_paid.csv")
@@ -217,11 +242,11 @@ func main() {
 		}
 	}
 	if ppd != "" && nspl != "" {
-		buckets, err := spine.AggregatePricePaid(ppd, nspl, codes)
+		full, err := spine.AggregatePricePaidByType(ppd, nspl, codes)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "PPD aggregate: %v (continuing without PPD columns)\n", err)
 		} else {
-			en.PPDMonthly = spine.PPDBucketsToAgg(buckets)
+			en.PPDMonthlyByType = spine.PPDBucketsByTypeToAgg(full)
 		}
 	}
 

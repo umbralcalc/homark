@@ -150,9 +150,18 @@ type Row struct {
 	MedianRatio  string
 	NetAddFY     string // net additional dwellings, FY containing this month
 	Earnings     string // median gross annual pay, calendar year
-	PPDMedian           string
-	PPDCount            string
-	PermissionsMonthly  string // permissions_approx_monthly: annual permissions / 12
+	PPDMedian          string
+	PPDCount           string
+	PPDMedianD         string // detached
+	PPDSalesD          string
+	PPDMedianS         string // semi-detached
+	PPDSalesS          string
+	PPDMedianT         string // terraced
+	PPDSalesT          string
+	PPDMedianF         string // flat
+	PPDSalesF          string
+	PermissionsMonthly string // permissions_approx_monthly: annual permissions / 12
+	CompletionsMonthly string // completions_approx_monthly: annual completions / 12
 }
 
 func (r Row) yearMonth() MonthKey { return monthKeyFromTime(r.Date) }
@@ -162,8 +171,11 @@ type SpineEnrichment struct {
 	MedianRatio    ONSAnnual // calendar year -> median price/earnings ratio (or similar)
 	SupplyNetFY    map[string]map[int]float64
 	EarningsAnnual AnnualString
-	PPDMonthly         map[string]map[MonthKey]PPDAgg
-	PermissionsAnnual  AnnualString // calendar year -> raw permissions_granted string; divided by 12 → monthly
+	// PPDMonthly is legacy: all-property median only. Prefer PPDMonthlyByType when using AggregatePricePaidByType.
+	PPDMonthly        map[string]map[MonthKey]PPDAgg
+	PPDMonthlyByType  map[string]map[MonthKey]PPDTypeMonthAgg
+	PermissionsAnnual AnnualString // calendar year -> raw permissions_granted string; divided by 12 → monthly
+	CompletionsAnnual AnnualString  // calendar year -> completions; divided by 12 → monthly
 }
 
 // BuildSpine streams ukhpiPath, keeps rows whose AreaCode is in codes, joins bank rates and optional enrichments.
@@ -247,7 +259,22 @@ func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]f
 					row.Earnings = m[cy]
 				}
 			}
-			if en.PPDMonthly != nil {
+			if en.PPDMonthlyByType != nil {
+				if m, ok := en.PPDMonthlyByType[ac]; ok {
+					if p, ok2 := m[key]; ok2 {
+						row.PPDMedian = p.All.MedianPrice
+						row.PPDCount = p.All.SalesCount
+						row.PPDMedianD = p.Detached.MedianPrice
+						row.PPDSalesD = p.Detached.SalesCount
+						row.PPDMedianS = p.Semi.MedianPrice
+						row.PPDSalesS = p.Semi.SalesCount
+						row.PPDMedianT = p.Terraced.MedianPrice
+						row.PPDSalesT = p.Terraced.SalesCount
+						row.PPDMedianF = p.Flat.MedianPrice
+						row.PPDSalesF = p.Flat.SalesCount
+					}
+				}
+			} else if en.PPDMonthly != nil {
 				if m, ok := en.PPDMonthly[ac]; ok {
 					if p, ok2 := m[key]; ok2 {
 						row.PPDMedian = p.MedianPrice
@@ -260,6 +287,15 @@ func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]f
 					if s, ok2 := m[cy]; ok2 {
 						if v, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
 							row.PermissionsMonthly = formatFloat(v / 12.0)
+						}
+					}
+				}
+			}
+			if en.CompletionsAnnual != nil {
+				if m, ok := en.CompletionsAnnual[ac]; ok {
+					if s, ok2 := m[cy]; ok2 {
+						if v, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
+							row.CompletionsMonthly = formatFloat(v / 12.0)
 						}
 					}
 				}
@@ -284,8 +320,11 @@ func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]f
 	w := csv.NewWriter(out)
 	outHeader := []string{
 		"Date", "RegionName", "AreaCode", "AveragePrice", "Index", "year_month", "bank_rate_pct",
-		"median_ratio", "net_additional_dwellings_fy", "median_gross_annual_pay", "ppd_median_price", "ppd_sales_count",
-		"permissions_approx_monthly",
+		"median_ratio", "net_additional_dwellings_fy", "median_gross_annual_pay",
+		"ppd_median_price", "ppd_sales_count",
+		"ppd_median_d", "ppd_sales_d", "ppd_median_s", "ppd_sales_s",
+		"ppd_median_t", "ppd_sales_t", "ppd_median_f", "ppd_sales_f",
+		"permissions_approx_monthly", "completions_approx_monthly",
 	}
 	if err := w.Write(outHeader); err != nil {
 		return 0, err
@@ -304,7 +343,16 @@ func BuildSpine(ukhpiPath string, codes map[string]struct{}, bank map[MonthKey]f
 			row.Earnings,
 			row.PPDMedian,
 			row.PPDCount,
+			row.PPDMedianD,
+			row.PPDSalesD,
+			row.PPDMedianS,
+			row.PPDSalesS,
+			row.PPDMedianT,
+			row.PPDSalesT,
+			row.PPDMedianF,
+			row.PPDSalesF,
 			row.PermissionsMonthly,
+			row.CompletionsMonthly,
 		}
 		if err := w.Write(line); err != nil {
 			return 0, err
