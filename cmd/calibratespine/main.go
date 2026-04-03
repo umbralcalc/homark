@@ -3,6 +3,7 @@
 // Add -validate-months to hold out the most recent N months for out-of-sample scoring.
 // Add -laplace to compute Gaussian posterior variance via the diagonal Hessian at the optimum.
 // Add -es-steps N to run the Evolution Strategy optimiser (uses analysis.NewEvolutionStrategyOptimisationPartitions).
+// Add -es-json-out path to save theta_mean + theta_cov for cmd/policyscenario.
 package main
 
 import (
@@ -61,6 +62,7 @@ func main() {
 	esSeed := flag.Uint64("es-seed", 0, "ES sampler seed (0 = default 42)")
 	esMeanLR := flag.Float64("es-mean-lr", 0, "ES mean learning rate (0 = default 0.5)")
 	esCovLR := flag.Float64("es-cov-lr", 0, "ES covariance learning rate (0 = default 0.2)")
+	esJSONOut := flag.String("es-json-out", "", "when using -es-steps, write theta_mean and theta_cov JSON for cmd/policyscenario")
 
 	base := housing.DefaultForwardOptions()
 	flag.Float64Var(&base.EarningsDrift, "earnings-drift", base.EarningsDrift, "base log-earnings drift (when not on grid)")
@@ -68,7 +70,7 @@ func main() {
 	flag.Float64Var(&base.SupplyBeta, "supply-beta", base.SupplyBeta, "base supply_beta when not on grid")
 	flag.Float64Var(&base.DemandSupplyPressureBeta, "demand-supply-beta", base.DemandSupplyPressureBeta, "DemandSupplyPressureBeta when demand-supply-steps <= 0")
 	flag.Float64Var(&base.CompletionFrac, "completion-frac", base.CompletionFrac, "base completion_frac when not on grid")
-	flag.Float64Var(&base.InitMedianRatioFallback, "init-median-ratio-fallback", 7, "first-month P/E fallback")
+	flag.Float64Var(&base.InitMedianRatioFallback, "init-median-ratio-fallback", 7, "P/E fallback for first forward month and for calibration targets when spine rows lack pay and ONS ratio (0 → 7)")
 	flag.Parse()
 
 	if *list {
@@ -126,9 +128,9 @@ func main() {
 	// ES optimisation path — replaces grid search when -es-steps > 0.
 	if *esSteps > 0 {
 		esOpt := housing.ESOptions{
-			Steps:          *esSteps,
-			CollectionSize: *esCollection,
-			Seed:           *esSeed,
+			Steps:            *esSteps,
+			CollectionSize:   *esCollection,
+			Seed:             *esSeed,
 			MeanLearningRate: *esMeanLR,
 			CovLearningRate:  *esCovLR,
 		}
@@ -142,6 +144,13 @@ func main() {
 			best.BankBeta, best.PriceDrift, best.SupplyBeta, best.DemandSupplyPressureBeta, best.CompletionFrac, best.EarningsDrift)
 		fmt.Printf("es theta_mean=%v\n", res.ThetaMean)
 		printStats("es", stats)
+		if strings.TrimSpace(*esJSONOut) != "" {
+			if err := housing.WritePosteriorCalibrationJSON(*esJSONOut, res); err != nil {
+				fmt.Fprintln(os.Stderr, "es-json-out:", err)
+				os.Exit(1)
+			}
+			fmt.Fprintf(os.Stderr, "wrote ES posterior JSON to %s\n", *esJSONOut)
+		}
 		printHint(*laName, ac, best)
 		return
 	}

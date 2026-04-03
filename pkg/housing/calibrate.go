@@ -33,12 +33,22 @@ func DefaultCalibrateGrid() CalibrateGrid {
 	}
 }
 
+// effectiveMedianRatioFallback matches forward spine init: zero or negative → 7.
+func effectiveMedianRatioFallback(init float64) float64 {
+	if init <= 0 {
+		return 7.0
+	}
+	return init
+}
+
 // TargetLogSeries builds historical log earnings and log price from spine rows after affordability forward-fill.
-func TargetLogSeries(obs []spine.MonthlyObservation) (logP, logE []float64, err error) {
+// initMedianRatioFallback is applied to any month still missing pay and ONS ratio (typical when enrichment CSVs are absent).
+func TargetLogSeries(obs []spine.MonthlyObservation, initMedianRatioFallback float64) (logP, logE []float64, err error) {
 	if len(obs) == 0 {
 		return nil, nil, fmt.Errorf("calibrate: no observations")
 	}
-	filled := ForwardFillAffordableFields(obs)
+	fb := effectiveMedianRatioFallback(initMedianRatioFallback)
+	filled := ForwardFillAffordableFields(obs, fb)
 	logE2, logP2, _, err := MonthlyLogSeries(filled)
 	if err != nil {
 		return nil, nil, err
@@ -99,14 +109,14 @@ func GaussianLogLikelihood(pred, obs []float64) (logLike, sigmaHat float64) {
 
 // CalibrationStats summarises the fit quality of a single calibration result.
 type CalibrationStats struct {
-	RMSE_P       float64 // RMSE of log price
-	RMSE_E       float64 // RMSE of log earnings
-	LogLikeP     float64 // Gaussian log-likelihood for log price (MLE σ²)
-	LogLikeE     float64 // Gaussian log-likelihood for log earnings (MLE σ²)
-	SigmaP       float64 // MLE noise std-dev for log price
-	SigmaE       float64 // MLE noise std-dev for log earnings
-	AIC          float64 // Akaike IC based on log-price log-likelihood: 2K − 2·LL_P
-	NumFreeParams int    // number of free parameters used for AIC
+	RMSE_P        float64 // RMSE of log price
+	RMSE_E        float64 // RMSE of log earnings
+	LogLikeP      float64 // Gaussian log-likelihood for log price (MLE σ²)
+	LogLikeE      float64 // Gaussian log-likelihood for log earnings (MLE σ²)
+	SigmaP        float64 // MLE noise std-dev for log price
+	SigmaE        float64 // MLE noise std-dev for log earnings
+	AIC           float64 // Akaike IC based on log-price log-likelihood: 2K − 2·LL_P
+	NumFreeParams int     // number of free parameters used for AIC
 }
 
 // ComputeCalibrationStats evaluates fit quality for a given ForwardOptions against the spine.
@@ -116,7 +126,7 @@ func ComputeCalibrationStats(
 	opt ForwardOptions,
 	numFreeParams int,
 ) (CalibrationStats, error) {
-	targetP, targetE, err := TargetLogSeries(obs)
+	targetP, targetE, err := TargetLogSeries(obs, opt.InitMedianRatioFallback)
 	if err != nil {
 		return CalibrationStats{}, err
 	}
@@ -163,7 +173,7 @@ func GridCalibrateDeterministic(
 	grid CalibrateGrid,
 	wLogE float64,
 ) (best ForwardOptions, rmseP, rmseE float64, err error) {
-	targetP, targetE, err := TargetLogSeries(obs)
+	targetP, targetE, err := TargetLogSeries(obs, base.InitMedianRatioFallback)
 	if err != nil {
 		return ForwardOptions{}, 0, 0, err
 	}
@@ -308,7 +318,7 @@ func perturbOpt(opt ForwardOptions, name string, delta float64) (ForwardOptions,
 
 // forwardLogLike runs the deterministic forward pass and returns the Gaussian log-likelihood of log price.
 func forwardLogLike(obs []spine.MonthlyObservation, opt ForwardOptions) (float64, error) {
-	targetP, _, err := TargetLogSeries(obs)
+	targetP, _, err := TargetLogSeries(obs, opt.InitMedianRatioFallback)
 	if err != nil {
 		return 0, err
 	}

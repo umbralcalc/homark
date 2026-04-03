@@ -13,9 +13,24 @@ func TestForwardFillAffordableFields(t *testing.T) {
 		{YearMonth: "1995-02", AveragePrice: 101e3, MedianRatio: 8.0},
 		{YearMonth: "1995-03", AveragePrice: 102e3},
 	}
-	out := ForwardFillAffordableFields(obs)
+	out := ForwardFillAffordableFields(obs, 0)
 	if out[0].MedianRatio != 8.0 || out[2].MedianRatio != 8.0 {
 		t.Fatalf("ratios %+v %+v", out[0].MedianRatio, out[2].MedianRatio)
+	}
+	_, _, _, err := MonthlyLogSeries(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestForwardFillAffordableFields_bareSpineSyntheticRatio(t *testing.T) {
+	obs := []spine.MonthlyObservation{
+		{YearMonth: "1995-01", AveragePrice: 100e3},
+		{YearMonth: "1995-02", AveragePrice: 101e3},
+	}
+	out := ForwardFillAffordableFields(obs, 7.0)
+	if out[0].MedianRatio != 7.0 || out[1].MedianRatio != 7.0 {
+		t.Fatalf("expected synthetic ratio 7, got %+v %+v", out[0].MedianRatio, out[1].MedianRatio)
 	}
 	_, _, _, err := MonthlyLogSeries(out)
 	if err != nil {
@@ -29,7 +44,7 @@ func TestForwardFillEarningsCarry(t *testing.T) {
 		{YearMonth: "2000-02", AveragePrice: 101e3, MedianRatio: 7.0, EarningsAnnual: 32000},
 		{YearMonth: "2000-03", AveragePrice: 102e3},
 	}
-	out := ForwardFillAffordableFields(obs)
+	out := ForwardFillAffordableFields(obs, 0)
 	if out[0].EarningsAnnual != 32000 || out[2].EarningsAnnual != 32000 {
 		t.Fatalf("earnings fill/carry %+v %+v", out[0].EarningsAnnual, out[2].EarningsAnnual)
 	}

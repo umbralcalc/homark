@@ -83,7 +83,7 @@ func ESCalibrate(
 	esOpt = fillESDefaults(esOpt)
 
 	// Compute target log series (forward-filled) for the reward comparison.
-	targetP, _, err := TargetLogSeries(obs)
+	targetP, _, err := TargetLogSeries(obs, base.InitMedianRatioFallback)
 	if err != nil {
 		return ESResult{}, fmt.Errorf("es calibrate target series: %w", err)
 	}

@@ -6,3 +6,8 @@ forwardspine
 
 runfromspine
 !cmd/runfromspine/
+
+policyscenario
+!cmd/policyscenario/
+
+posteriors/*
