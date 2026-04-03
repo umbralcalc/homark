@@ -1,5 +1,14 @@
 # Canonical pilot local authorities (England). Area codes are ONS GSS LAD / UA codes.
 targets:
+  # Inner north London (around Islington) — high-density, high-price inner-city markets
+  - name: Camden
+    area_code: E09000007
+  - name: Hackney
+    area_code: E09000012
+  - name: Haringey
+    area_code: E09000014
+  - name: Islington
+    area_code: E09000019
   - name: Tower Hamlets
     area_code: E09000030
   - name: St Albans

@@ -13,4 +13,8 @@ policyscenario
 credibilityreport
 !cmd/credibilityreport/
 
+scenarioplot
+!cmd/scenarioplot/
+
 posteriors/*
+artifacts/

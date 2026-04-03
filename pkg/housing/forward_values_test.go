@@ -1,8 +1,10 @@
 package housing
 
 import (
+	"math"
 	"testing"
 
+	"github.com/umbralcalc/homark/pkg/spine"
 	"github.com/umbralcalc/stochadex/pkg/continuous"
 	"github.com/umbralcalc/stochadex/pkg/general"
 	"github.com/umbralcalc/stochadex/pkg/simulator"
@@ -83,5 +85,21 @@ func TestPriceDriftComposeHarness(t *testing.T) {
 	settings, impl := g.GenerateConfigs()
 	if err := simulator.RunWithHarnesses(settings, impl); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestInitialPriceDriftScalar_compositionMix(t *testing.T) {
+	opt := ForwardOptions{
+		PriceDrift:           0.01,
+		CompositionDriftBeta: 0.002,
+		CompositionFlatShare: 1.0,
+		SupplyScale:          1000,
+		PipelineRef:          500,
+	}
+	z := spine.MonthlyObservation{BankRatePct: 0, NetAddFY: 0}
+	d := initialPriceDriftScalar(z, opt, 1000, 500)
+	want := 0.01 + 0.002*(1.0-0.5)
+	if math.Abs(d-want) > 1e-12 {
+		t.Fatalf("drift %g want %g", d, want)
 	}
 }

@@ -1,5 +1,6 @@
-// Command policyscenario runs a small grid of planning-adjacent scenarios on the forward spine:
-// approval-rate actions × bank-rate scaling of the historical path × optional posterior samples of ES theta.
+// Command policyscenario runs a Cartesian grid of planning-adjacent scenarios on the forward spine:
+// approvals × bank-rate scaling × optional completion_frac, market-fraction, and flat-share (density-mix) grids,
+// with optional posterior samples of ES theta.
 // Write ES JSON with: go run ./cmd/calibratespine -la "Leeds" -es-steps 400 -es-json-out posteriors/leeds.json
 // Then: go run ./cmd/policyscenario -la "Leeds" -posterior posteriors/leeds.json -approvals 0,80,160 -bank-scales 1,1.1 -posterior-samples 50
 package main
@@ -8,6 +9,7 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -27,8 +29,11 @@ func main() {
 	maxSteps := flag.Int("max-steps", 0, "cap months (0 = all)")
 	list := flag.Bool("list", false, "list pilot LAs and exit")
 
-	approvalsStr := flag.String("approvals", "0", "comma-separated approval rates (dwellings/month into deterministic pipeline)")
+	approvalsStr := flag.String("approvals", "0", "comma-separated approval rates (dwellings/month into deterministic pipeline when spine has no permissions column)")
 	bankScalesStr := flag.String("bank-scales", "1", "comma-separated multipliers applied to historical bank_rate_pct on the spine")
+	completionFracsStr := flag.String("completion-fracs", "", "optional comma-separated completion_frac per scenario (omit = use -completion-frac or theta from -posterior)")
+	marketFracsStr := flag.String("market-fractions", "1", "comma-separated market delivery fraction 0–1 (scales inflow: tenure/affordable stylisation)")
+	flatSharesStr := flag.String("flat-shares", "0.5", "comma-separated composition flat-share 0–1 (neutral 0.5; used with -composition-drift-beta)")
 	posteriorPath := flag.String("posterior", "", "JSON from calibratespine -es-json-out (theta_mean, theta_cov); omit to use -bank-beta … flags only")
 	posteriorSamples := flag.Int("posterior-samples", 0, "if >0 and -posterior has theta_cov, draw this many theta samples per scenario cell; 0 = one run using theta_mean (or flags)")
 
@@ -47,6 +52,7 @@ func main() {
 	flag.Float64Var(&base.DemandSupplyPressureBeta, "demand-supply-beta", base.DemandSupplyPressureBeta, "demand_supply_pressure beta")
 	flag.Float64Var(&base.CompletionFrac, "completion-frac", base.CompletionFrac, "completion_frac (overridden by theta when using -posterior)")
 	flag.Float64Var(&base.EarningsDrift, "earnings-drift", base.EarningsDrift, "earnings drift")
+	flag.Float64Var(&base.CompositionDriftBeta, "composition-drift-beta", base.CompositionDriftBeta, "density-mix lever: adds beta×(flat_share−0.5) to log-price drift; flat_share from -flat-shares grid")
 	flag.Parse()
 
 	if *list {
@@ -102,6 +108,26 @@ func main() {
 		fmt.Fprintln(os.Stderr, "-bank-scales:", err)
 		os.Exit(1)
 	}
+	var completionFracs []float64
+	if strings.TrimSpace(*completionFracsStr) != "" {
+		completionFracs, err = parseCommaFloats(*completionFracsStr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "-completion-fracs:", err)
+			os.Exit(1)
+		}
+	} else {
+		completionFracs = []float64{math.NaN()}
+	}
+	marketFracs, err := parseCommaFloats(*marketFracsStr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "-market-fractions:", err)
+		os.Exit(1)
+	}
+	flatShares, err := parseCommaFloats(*flatSharesStr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "-flat-shares:", err)
+		os.Exit(1)
+	}
 
 	var post housing.PosteriorCalibrationJSON
 	if strings.TrimSpace(*posteriorPath) != "" {
@@ -124,7 +150,7 @@ func main() {
 	rng := rand.New(rand.NewSource(int64(*seed)))
 
 	w := csv.NewWriter(os.Stdout)
-	_ = w.Write([]string{"sample_idx", "approval_rate", "bank_scale", "mean_afford", "last_afford", "n_steps"})
+	_ = w.Write([]string{"sample_idx", "approval_rate", "bank_scale", "completion_frac", "market_fraction", "flat_share", "mean_afford", "last_afford", "n_steps"})
 	for draw := 0; draw < nDraws; draw++ {
 		var theta []float64
 		switch {
@@ -135,32 +161,47 @@ func main() {
 		default:
 			theta = housing.ThetaFromOptions(base)
 		}
-		opt := housing.OptionsFromTheta(base, theta)
+		optBase := housing.OptionsFromTheta(base, theta)
 		for _, appr := range approvals {
-			opt.ApprovalRate = appr
-			do := housing.DeterministicForwardOptions(opt)
 			for _, bscale := range bankScales {
-				scen := housing.CloneMonthlyObservations(obs)
-				housing.ScaleBankRatePct(scen, bscale)
-				_, series, err := housing.RunForwardLogSeries(scen, do)
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-					os.Exit(1)
+				for _, cfp := range completionFracs {
+					for _, mf := range marketFracs {
+						for _, fs := range flatShares {
+							opt := optBase
+							opt.ApprovalRate = appr
+							if !math.IsNaN(cfp) {
+								opt.CompletionFrac = cfp
+							}
+							opt.MarketDeliveryFraction = mf
+							opt.CompositionFlatShare = fs
+							do := housing.DeterministicForwardOptions(opt)
+							scen := housing.CloneMonthlyObservations(obs)
+							housing.ScaleBankRatePct(scen, bscale)
+							_, series, err := housing.RunForwardLogSeries(scen, do)
+							if err != nil {
+								fmt.Fprintln(os.Stderr, err)
+								os.Exit(1)
+							}
+							aff, ok := series["affordability"]
+							if !ok {
+								fmt.Fprintln(os.Stderr, "missing affordability series")
+								os.Exit(1)
+							}
+							meanA, lastA, n := housing.AffordabilityPathStats(aff)
+							_ = w.Write([]string{
+								strconv.Itoa(draw),
+								strconv.FormatFloat(appr, 'g', -1, 64),
+								strconv.FormatFloat(bscale, 'g', -1, 64),
+								strconv.FormatFloat(opt.CompletionFrac, 'g', -1, 64),
+								strconv.FormatFloat(mf, 'g', -1, 64),
+								strconv.FormatFloat(fs, 'g', -1, 64),
+								strconv.FormatFloat(meanA, 'g', -1, 64),
+								strconv.FormatFloat(lastA, 'g', -1, 64),
+								strconv.Itoa(n),
+							})
+						}
+					}
 				}
-				aff, ok := series["affordability"]
-				if !ok {
-					fmt.Fprintln(os.Stderr, "missing affordability series")
-					os.Exit(1)
-				}
-				meanA, lastA, n := housing.AffordabilityPathStats(aff)
-				_ = w.Write([]string{
-					strconv.Itoa(draw),
-					strconv.FormatFloat(appr, 'g', -1, 64),
-					strconv.FormatFloat(bscale, 'g', -1, 64),
-					strconv.FormatFloat(meanA, 'g', -1, 64),
-					strconv.FormatFloat(lastA, 'g', -1, 64),
-					strconv.Itoa(n),
-				})
 			}
 		}
 	}

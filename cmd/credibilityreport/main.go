@@ -146,6 +146,7 @@ func main() {
 			fmt.Printf("permissions_vs_completions_lag: — (%v)\n", err)
 		} else {
 			fmt.Printf("permissions_vs_completions_log: best_lag_months=%d r=%.4f overlapping_pairs=%d\n", lag, r, n)
+			fmt.Printf("pipeline_lag_diagnostic: permissions→completions peak correlation at lag=%d months (informative; not a fitted structural delay)\n", lag)
 		}
 	}
 

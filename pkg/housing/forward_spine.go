@@ -32,6 +32,14 @@ type ForwardOptions struct {
 	// InitMedianRatioFallback is used only when the first spine row has no pay or ONS ratio (typical before ~1997).
 	// Implied log earnings = logP − log(fallback). Zero means use 7.0.
 	InitMedianRatioFallback float64
+	// MarketDeliveryFraction scales planning inflow into the pipeline (0–1). 1 = all approved units enter;
+	// <1 stylises tenure/affordable requirements that reduce market-facing supply. Applied to permissions_approx_monthly
+	// when present, else to constant ApprovalRate.
+	MarketDeliveryFraction float64
+	// CompositionFlatShare is a stylised share of new supply that is “flats” (0–1); neutral mix at 0.5.
+	// When CompositionDriftBeta != 0, log-price drift adds beta×(CompositionFlatShare−0.5) for density-mix scenarios.
+	CompositionFlatShare float64
+	CompositionDriftBeta float64
 }
 
 // DefaultForwardOptions matches the illustrative coefficients in cfg/single_la_housing.yaml.
@@ -45,6 +53,9 @@ func DefaultForwardOptions() ForwardOptions {
 		PipelineInit: 0, SeedPipeline: 0,
 		SeedEarnings: 9101,
 		SeedPrice:    9102,
+		MarketDeliveryFraction: 1,
+		CompositionFlatShare:   0.5,
+		CompositionDriftBeta:   0,
 	}
 }
 
@@ -74,18 +85,23 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 	supplyData := make([][]float64, len(obs))
 	approvalsData := make([][]float64, len(obs))
 	hasPermissions := false
+	mf := opt.MarketDeliveryFraction
+	if mf <= 0 || mf > 1 {
+		mf = 1
+	}
 	for i := range obs {
 		bankData[i] = []float64{obs[i].BankRatePct}
 		supplyData[i] = []float64{obs[i].NetAddFY}
-		approvalsData[i] = []float64{obs[i].PermissionsMonthly}
+		approvalsData[i] = []float64{obs[i].PermissionsMonthly * mf}
 		if obs[i].PermissionsMonthly > 0 {
 			hasPermissions = true
 		}
 	}
 	// Fall back to constant approval rate when no permissions data in spine.
 	if !hasPermissions {
+		ar := opt.ApprovalRate * mf
 		for i := range approvalsData {
-			approvalsData[i] = []float64{opt.ApprovalRate}
+			approvalsData[i] = []float64{ar}
 		}
 	}
 
@@ -143,10 +159,12 @@ func ForwardSpineConfigs(obs []spine.MonthlyObservation, opt ForwardOptions) (*s
 			StateHistoryDepth: 2,
 		})
 	} else {
+		// Deterministic pipeline uses a constant monthly inflow (ApprovalRate×marketFraction), not the
+		// time-varying permissions column; use SeedPipeline>0 (stochastic path + approvals partition) for spine-driven inflow.
 		g.SetPartition(&simulator.PartitionConfig{
 			Name: "pipeline",
 			Iteration: &general.ValuesFunctionIteration{
-				Function: PipelineStockValuesFunction(2, opt.ApprovalRate, compFrac),
+				Function: PipelineStockValuesFunction(2, opt.ApprovalRate*mf, compFrac),
 			},
 			Params:            simulator.NewParams(map[string][]float64{}),
 			InitStateValues:   []float64{opt.PipelineInit},

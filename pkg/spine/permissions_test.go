@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+
+	"github.com/umbralcalc/homark/pkg/ladata"
 )
 
 func TestLoadPermissionsAnnual(t *testing.T) {
@@ -13,8 +15,11 @@ func TestLoadPermissionsAnnual(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Template covers all five pilot LAs.
-	for _, ac := range []string{"E09000030", "E07000240", "E08000035", "E06000043", "E07000117"} {
+	codes, err := ladata.AreaCodes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ac := range codes {
 		if _, ok := data[ac]; !ok {
 			t.Errorf("missing area %s", ac)
 		}

@@ -69,6 +69,16 @@ func PriceDriftValuesFunction(bankIdx, supplyIdx, pipeIdx, logEarningsIdx int, i
 			imb := (le - initLogEarnings) - (supply / supplyScale) - (pipe / pipeRef)
 			d += opt.DemandSupplyPressureBeta * imb
 		}
+		if opt.CompositionDriftBeta != 0 {
+			fs := opt.CompositionFlatShare
+			if fs < 0 {
+				fs = 0
+			}
+			if fs > 1 {
+				fs = 1
+			}
+			d += opt.CompositionDriftBeta * (fs - 0.5)
+		}
 		return []float64{d}
 	}
 }
@@ -193,6 +203,16 @@ func initialPriceDriftScalar(obs0 spine.MonthlyObservation, opt ForwardOptions, 
 	if opt.DemandSupplyPressureBeta != 0 {
 		imb := -(supply / supplyScale) - (pipe / pipeRef)
 		d += opt.DemandSupplyPressureBeta * imb
+	}
+	if opt.CompositionDriftBeta != 0 {
+		fs := opt.CompositionFlatShare
+		if fs < 0 {
+			fs = 0
+		}
+		if fs > 1 {
+			fs = 1
+		}
+		d += opt.CompositionDriftBeta * (fs - 0.5)
 	}
 	return d
 }
