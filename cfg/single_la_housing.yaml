@@ -2,6 +2,9 @@
 # then affordability ratio price/earnings = exp(logP - logE).
 # Phased roadmap and “what exists vs planned”: ../README.md
 #
+# Written entirely as data: {type: ...} iterations from the stochadex registry and one
+# expressions: partition for the affordability ratio. No Go, no code generation.
+#
 # Historical replay from dat/processed/spine_monthly.csv (no synthetic drift) is:
 #   go run ./cmd/runfromspine -la "Tower Hamlets"   # or -area E09000030
 #
@@ -12,47 +15,43 @@
 main:
   partitions:
     - name: log_earnings
-      iteration: logEarnings
+      iteration: {type: drift_diffusion}
       params:
         drift_coefficients: [0.0005]
         diffusion_coefficients: [0.004]
       init_state_values: [10.9]
       state_history_depth: 1
       seed: 9101
-      extra_packages:
-        - github.com/umbralcalc/stochadex/pkg/continuous
-      extra_vars:
-        - logEarnings: "&continuous.DriftDiffusionIteration{}"
 
     - name: log_price
-      iteration: logPrice
+      iteration: {type: drift_diffusion}
       params:
         drift_coefficients: [0.0008]
         diffusion_coefficients: [0.012]
       init_state_values: [12.2]
       state_history_depth: 1
       seed: 9102
-      extra_packages:
-        - github.com/umbralcalc/stochadex/pkg/continuous
-      extra_vars:
-        - logPrice: "&continuous.DriftDiffusionIteration{}"
 
+    # Affordability ratio = exp(logP - logE). The Go AffordabilityFromLogsIteration read
+    # both logs from the previous committed step (stateHistories row 0); upstreams: is that
+    # same lag-1 state-history read, so it is the faithful translation.
     - name: affordability
-      iteration: affordability
-      params:
-        log_price_partition: [1]
-        log_earnings_partition: [0]
       init_state_values: [1.0]
       state_history_depth: 1
       seed: 0
-      extra_packages:
-        - github.com/umbralcalc/homark/pkg/housing
-      extra_vars:
-        - affordability: "&housing.AffordabilityFromLogsIteration{}"
+  expressions:
+    - partition: affordability
+      fields:
+        - {name: ratio}
+      upstreams:
+        logp: log_price
+        loge: log_earnings
+      outputs:
+        - "exp(logp - loge)"
 
   simulation:
-    output_condition: "&simulator.EveryStepOutputCondition{}"
-    output_function: "&simulator.StdoutOutputFunction{}"
-    termination_condition: "&simulator.NumberOfStepsTerminationCondition{MaxNumberOfSteps: 60}"
-    timestep_function: "&simulator.ConstantTimestepFunction{Stepsize: 1.0}"
+    output_condition: {type: every_step}
+    output_function: {type: stdout}
+    termination_condition: {type: number_of_steps, max_steps: 60}
+    timestep_function: {type: constant, stepsize: 1.0}
     init_time_value: 0.0
