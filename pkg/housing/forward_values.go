@@ -90,13 +90,13 @@ const ThetaParamName = "theta"
 // Index meanings: 0=bank_beta, 1=price_drift_base, 2=supply_beta, 3=demand_supply_beta,
 // 4=completion_frac, 5=earnings_drift.
 const (
-	ThetaBankBeta          = 0
-	ThetaPriceDriftBase    = 1
-	ThetaSupplyBeta        = 2
-	ThetaDemandSupplyBeta  = 3
-	ThetaCompletionFrac    = 4
-	ThetaEarningsDrift     = 5
-	ThetaDim               = 6
+	ThetaBankBeta         = 0
+	ThetaPriceDriftBase   = 1
+	ThetaSupplyBeta       = 2
+	ThetaDemandSupplyBeta = 3
+	ThetaCompletionFrac   = 4
+	ThetaEarningsDrift    = 5
+	ThetaDim              = 6
 )
 
 // ThetaFromOptions extracts the theta vector from a ForwardOptions value.

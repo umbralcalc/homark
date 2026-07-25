@@ -95,7 +95,7 @@ func main() {
 		BankBeta: *bankBeta, SupplyBeta: *supplyBeta, SupplyScale: *supplyScale,
 		PipelineBeta: *pipelineBeta, PipelineRef: *pipelineRef,
 		DemandSupplyPressureBeta: *demandSupplyBeta,
-		ApprovalRate: *approvalRate, CompletionFrac: *completionFrac, AttritionRate: *attritionRate,
+		ApprovalRate:             *approvalRate, CompletionFrac: *completionFrac, AttritionRate: *attritionRate,
 		PipelineInit: *pipelineInit, SeedPipeline: *seedPipeline,
 		SeedEarnings: *seedE, SeedPrice: *seedP,
 		InitMedianRatioFallback: *initRatio,

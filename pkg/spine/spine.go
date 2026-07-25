@@ -141,15 +141,15 @@ func parseHPIDate(s string) (time.Time, bool) {
 
 // Row is one output line in spine_monthly.csv.
 type Row struct {
-	Date         time.Time
-	RegionName   string
-	AreaCode     string
-	AveragePrice string
-	Index        string
-	BankRatePct  string
-	MedianRatio  string
-	NetAddFY     string // net additional dwellings, FY containing this month
-	Earnings     string // median gross annual pay, calendar year
+	Date               time.Time
+	RegionName         string
+	AreaCode           string
+	AveragePrice       string
+	Index              string
+	BankRatePct        string
+	MedianRatio        string
+	NetAddFY           string // net additional dwellings, FY containing this month
+	Earnings           string // median gross annual pay, calendar year
 	PPDMedian          string
 	PPDCount           string
 	PPDMedianD         string // detached
@@ -175,7 +175,7 @@ type SpineEnrichment struct {
 	PPDMonthly        map[string]map[MonthKey]PPDAgg
 	PPDMonthlyByType  map[string]map[MonthKey]PPDTypeMonthAgg
 	PermissionsAnnual AnnualString // calendar year -> raw permissions_granted string; divided by 12 → monthly
-	CompletionsAnnual AnnualString  // calendar year -> completions; divided by 12 → monthly
+	CompletionsAnnual AnnualString // calendar year -> completions; divided by 12 → monthly
 }
 
 // BuildSpine streams ukhpiPath, keeps rows whose AreaCode is in codes, joins bank rates and optional enrichments.

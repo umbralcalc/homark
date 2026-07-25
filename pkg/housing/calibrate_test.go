@@ -174,7 +174,7 @@ func TestLaplaceLogLikeVariances(t *testing.T) {
 func TestPPDPricePreferenceInLogPriceFromObs(t *testing.T) {
 	// When PPDMedianPrice is set, it should be preferred over AveragePrice.
 	o := spine.MonthlyObservation{
-		AveragePrice:  200e3,
+		AveragePrice:   200e3,
 		PPDMedianPrice: 180e3,
 	}
 	lp, err := logPriceFromObs(o)

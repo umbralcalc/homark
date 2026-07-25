@@ -13,27 +13,27 @@ import (
 
 // MonthlyObservation is one row of spine_monthly.csv for replay / calibration.
 type MonthlyObservation struct {
-	Date           time.Time
-	YearMonth      string
-	AreaCode       string
-	RegionName     string
-	AveragePrice   float64 // 0 = missing
-	Index          float64 // 0 = missing
-	BankRatePct    float64
-	MedianRatio    float64 // 0 = missing (ONS affordability)
-	EarningsAnnual float64 // 0 = missing (ASHE-style gross pay)
+	Date               time.Time
+	YearMonth          string
+	AreaCode           string
+	RegionName         string
+	AveragePrice       float64 // 0 = missing
+	Index              float64 // 0 = missing
+	BankRatePct        float64
+	MedianRatio        float64 // 0 = missing (ONS affordability)
+	EarningsAnnual     float64 // 0 = missing (ASHE-style gross pay)
 	NetAddFY           float64 // 0 = missing (net additional dwellings, FY label on spine row)
-	PermissionsMonthly   float64 // 0 = missing (annual permissions / 12)
-	CompletionsMonthly   float64 // 0 = missing (annual completions / 12)
-	PPDMedianPrice       float64 // 0 = missing (all types)
-	PPDMedianDetached    float64
-	PPDSalesDetached     float64
-	PPDMedianSemi        float64
-	PPDSalesSemi         float64
-	PPDMedianTerraced    float64
-	PPDSalesTerraced     float64
-	PPDMedianFlat        float64
-	PPDSalesFlat         float64
+	PermissionsMonthly float64 // 0 = missing (annual permissions / 12)
+	CompletionsMonthly float64 // 0 = missing (annual completions / 12)
+	PPDMedianPrice     float64 // 0 = missing (all types)
+	PPDMedianDetached  float64
+	PPDSalesDetached   float64
+	PPDMedianSemi      float64
+	PPDSalesSemi       float64
+	PPDMedianTerraced  float64
+	PPDSalesTerraced   float64
+	PPDMedianFlat      float64
+	PPDSalesFlat       float64
 }
 
 func parseFloatOK(s string) (float64, bool) {

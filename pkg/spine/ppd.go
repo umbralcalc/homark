@@ -113,9 +113,9 @@ type PPDByTypeBuckets struct {
 
 // PPDTypeMonthAgg is monthly PPD medians: All sales plus detached/semi/terraced/flat when sample exists.
 type PPDTypeMonthAgg struct {
-	All              PPDAgg
-	Detached, Semi   PPDAgg
-	Terraced, Flat   PPDAgg
+	All            PPDAgg
+	Detached, Semi PPDAgg
+	Terraced, Flat PPDAgg
 }
 
 // AggregatePricePaid streams Land Registry Price Paid CSV, maps postcodes to LAD via nspl,

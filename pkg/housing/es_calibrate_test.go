@@ -11,10 +11,10 @@ func makeSteadyObs(n int) []spine.MonthlyObservation {
 	obs := make([]spine.MonthlyObservation, n)
 	for i := range obs {
 		obs[i] = spine.MonthlyObservation{
-			YearMonth:    "2004-01",
-			AveragePrice: 100e3,
-			MedianRatio:  8.0,
-			BankRatePct:  4.5,
+			YearMonth:      "2004-01",
+			AveragePrice:   100e3,
+			MedianRatio:    8.0,
+			BankRatePct:    4.5,
 			EarningsAnnual: 30e3,
 		}
 	}
@@ -104,10 +104,10 @@ func TestPriceDriftFromThetaFunction(t *testing.T) {
 	// theta-based function (runs correctly with the existing ES path).
 	// Just verify the function doesn't panic and returns a plausible value.
 	const (
-		bankIdx  = 0
-		supIdx   = 1
-		pipeIdx  = 3
-		leIdx    = 5
+		bankIdx = 0
+		supIdx  = 1
+		pipeIdx = 3
+		leIdx   = 5
 	)
 	initLE := math.Log(30e3)
 	fn := PriceDriftFromThetaValuesFunction(bankIdx, supIdx, pipeIdx, leIdx, initLE, 1000, 500)
