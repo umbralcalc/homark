@@ -2,7 +2,7 @@
 // coefficients to minimise RMSE / log-likelihood of log price vs filled historical spine.
 // Add -validate-months to hold out the most recent N months for out-of-sample scoring.
 // Add -laplace to compute Gaussian posterior variance via the diagonal Hessian at the optimum.
-// Add -es-steps N to run the Evolution Strategy optimiser (uses analysis.NewEvolutionStrategyOptimisationPartitions).
+// Add -es-steps N to run the Evolution Strategy optimiser (uses macros.NewEvolutionStrategyOptimisationPartitions).
 // Add -es-json-out path to save theta_mean + theta_cov for cmd/policyscenario.
 package main
 

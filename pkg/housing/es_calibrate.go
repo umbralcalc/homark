@@ -5,10 +5,10 @@ import (
 	"math"
 
 	"github.com/umbralcalc/homark/pkg/spine"
-	"github.com/umbralcalc/stochadex/pkg/analysis"
 	"github.com/umbralcalc/stochadex/pkg/continuous"
 	"github.com/umbralcalc/stochadex/pkg/general"
 	"github.com/umbralcalc/stochadex/pkg/inference"
+	"github.com/umbralcalc/stochadex/pkg/macros"
 	"github.com/umbralcalc/stochadex/pkg/simulator"
 )
 
@@ -62,7 +62,7 @@ type ESResult struct {
 	ThetaCov  []float64      // converged parameter covariance matrix (6×6, row-major)
 }
 
-// ESCalibrate uses analysis.NewEvolutionStrategyOptimisationPartitions to optimise
+// ESCalibrate uses macros.NewEvolutionStrategyOptimisationPartitions to optimise
 // the forward-spine model parameters against the observed spine, replacing the grid search.
 //
 // The embedded simulation runs the full spine window deterministically for each sampled
@@ -137,7 +137,7 @@ func ESCalibrate(
 	initDrift := initialPriceDriftScalar(obs[0], base, supplyScale, pipeRef)
 
 	// Window partitions — all baked-in, sampled params wired via OutsideUpstreams.
-	windowPartitions := []analysis.WindowedPartition{
+	windowPartitions := []macros.WindowedPartition{
 		{
 			Partition: &simulator.PartitionConfig{
 				Name:              "bank_rate",
@@ -240,7 +240,7 @@ func ESCalibrate(
 	}
 
 	// Reward: negative squared error between simulated and observed log price.
-	rewardPartition := analysis.WindowedPartition{
+	rewardPartition := macros.WindowedPartition{
 		Partition: &simulator.PartitionConfig{
 			Name: "neg_sq_err",
 			Iteration: &general.ValuesFunctionIteration{
@@ -260,39 +260,39 @@ func ESCalibrate(
 	initMean := ThetaFromOptions(base)
 	initCov := esDiagCovariance(esOpt)
 
-	applied := analysis.AppliedEvolutionStrategyOptimisation{
-		Sampler: analysis.EvolutionStrategySampler{
+	applied := macros.AppliedEvolutionStrategyOptimisation{
+		Sampler: macros.EvolutionStrategySampler{
 			Name:    sampler,
 			Default: initMean,
 		},
-		Sorting: analysis.EvolutionStrategySorting{
+		Sorting: macros.EvolutionStrategySorting{
 			Name:           "es_sorting",
 			CollectionSize: esOpt.CollectionSize,
 			EmptyValue:     math.Inf(-1),
 		},
-		Mean: analysis.EvolutionStrategyMean{
+		Mean: macros.EvolutionStrategyMean{
 			Name:         "es_theta_mean",
 			Default:      initMean,
 			Weights:      weights,
 			LearningRate: esOpt.MeanLearningRate,
 		},
-		Covariance: analysis.EvolutionStrategyCovariance{
+		Covariance: macros.EvolutionStrategyCovariance{
 			Name:         "es_theta_cov",
 			Default:      initCov,
 			LearningRate: esOpt.CovLearningRate,
 		},
-		Reward: analysis.EvolutionStrategyReward{
+		Reward: macros.EvolutionStrategyReward{
 			Partition:      rewardPartition,
 			DiscountFactor: esOpt.DiscountFactor,
 		},
-		Window: analysis.WindowedPartitions{
+		Window: macros.WindowedPartitions{
 			Partitions: windowPartitions,
 			Depth:      len(obs),
 		},
 		Seed: esOpt.Seed,
 	}
 
-	esPartitions := analysis.NewEvolutionStrategyOptimisationPartitions(applied, nil)
+	esPartitions := macros.NewEvolutionStrategyOptimisationPartitions(applied, nil)
 
 	// Pre-compute the base-theta reward and seed ALL sorting collection slots with it.
 	// This prevents math.Inf(-1) EmptyValue entries from propagating NaN into the mean
@@ -484,7 +484,7 @@ func ESCalibrateStats(
 }
 
 // NormalLikelihoodDistributionForLogPrice wraps inference.NormalLikelihoodDistribution
-// so it can be used as the data-comparison model in analysis.NewLikelihoodComparisonPartition
+// so it can be used as the data-comparison model in macros.NewLikelihoodComparisonPartition
 // for the log-price partition.
 //
 // This exists purely to export the stochadex NormalLikelihoodDistribution under a
