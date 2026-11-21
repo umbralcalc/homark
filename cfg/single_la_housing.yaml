@@ -12,47 +12,46 @@
 #   go run ./cmd/forwardspine -la "Tower Hamlets" -bank-beta -0.01 -supply-beta -2e-5
 # Deterministic grid calibration vs historical log price:
 #   go run ./cmd/calibratespine -la "Tower Hamlets"
-main:
-  partitions:
-    - name: log_earnings
-      iteration: {type: drift_diffusion}
-      params:
-        drift_coefficients: [0.0005]
-        diffusion_coefficients: [0.004]
-      init_state_values: [10.9]
-      state_history_depth: 1
-      seed: 9101
+partitions:
+  - name: log_earnings
+    iteration: {type: drift_diffusion}
+    params:
+      drift_coefficients: [0.0005]
+      diffusion_coefficients: [0.004]
+    init_state_values: [10.9]
+    state_history_depth: 1
+    seed: 9101
 
-    - name: log_price
-      iteration: {type: drift_diffusion}
-      params:
-        drift_coefficients: [0.0008]
-        diffusion_coefficients: [0.012]
-      init_state_values: [12.2]
-      state_history_depth: 1
-      seed: 9102
+  - name: log_price
+    iteration: {type: drift_diffusion}
+    params:
+      drift_coefficients: [0.0008]
+      diffusion_coefficients: [0.012]
+    init_state_values: [12.2]
+    state_history_depth: 1
+    seed: 9102
 
-    # Affordability ratio = exp(logP - logE). The Go AffordabilityFromLogsIteration read
-    # both logs from the previous committed step (stateHistories row 0); upstreams: is that
-    # same lag-1 state-history read, so it is the faithful translation.
-    - name: affordability
-      init_state_values: [1.0]
-      state_history_depth: 1
-      seed: 0
-  expressions:
-    - partition: affordability
-      fields:
-        - {name: ratio}
-      upstreams:
-        logp: log_price
-        loge: log_earnings
-      outputs:
-        - "exp(logp - loge)"
+  # Affordability ratio = exp(logP - logE). The Go AffordabilityFromLogsIteration read
+  # both logs from the previous committed step (stateHistories row 0); upstreams: is that
+  # same lag-1 state-history read, so it is the faithful translation.
+  - name: affordability
+    init_state_values: [1.0]
+    state_history_depth: 1
+    seed: 0
+expressions:
+  - partition: affordability
+    fields:
+      - {name: ratio}
+    upstreams:
+      logp: log_price
+      loge: log_earnings
+    outputs:
+      - "exp(logp - loge)"
 
-  simulation:
-    termination_condition: {type: number_of_steps, max_steps: 60}
-    timestep_function: {type: constant, stepsize: 1.0}
-    init_time_value: 0.0
+simulation:
+  termination_condition: {type: number_of_steps, max_steps: 60}
+  timestep_function: {type: constant, stepsize: 1.0}
+  init_time_value: 0.0
 
 outputs:
   - {name: output, condition: {type: every_step}, function: {type: stdout}}
